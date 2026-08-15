@@ -284,6 +284,97 @@ def ch3_loads(input_dict):
         post=r"\hline",
     )
 
+    # --- Table 3.2: Dead Load for Surfacing (DW) ---
+    surfacing_table = make_longtable(
+        r"|L{5.5cm}|p{10.0cm}|",
+        r"\textbf{Dead Load for Surfacing (DW)}",
+        [r"\textbf{parameter} & \textbf{value}"],
+        "\n".join(
+            row + r" \\[6pt]" + "\n" + r"\hline"
+            for row in [
+                r"\textnormal{Wearing Course Load} & " + _render_value(input_dict, KEY_WC_MATERIAL) + r" x " + _render_value(input_dict, KEY_WC_THICKNESS),
+                r"\textnormal{Additional SIDL (Crash Barrier)} & " + _render_value(input_dict, KEY_CB_LOAD) + r" kN/m per barrier",
+                r"\textnormal{Railing Load} & " + _render_value(input_dict, KEY_RL_LOAD_VALUE) + r" kN/m\sdstar{}",
+            ]
+        ),
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
+    # --- Table 3.4: Wind Load (WL) ---
+    wind_table = make_longtable(
+        r"|L{5.5cm}|p{10.0cm}|",
+        r"\textbf{Wind Load (WL) --- per IRC 6}",
+        [r"\textbf{parameter} & \textbf{value}"],
+        "\n".join(
+            row + r" \\[6pt]" + "\n" + r"\hline"
+            for row in [
+                r"\textnormal{Basic Wind Speed, Vb} & " + _render_value(input_dict, 'wind_speed', r' m/s') + r" [from Project Location]",
+                r"\textnormal{Terrain Type} & " + _render_value(input_dict, KEY_WL_TERRAIN_TYPE),
+                r"\textnormal{Average Exposed Height, H (m)} & " + _render_value(input_dict, KEY_WL_AVG_EXPOSED_HEIGHT, r' m'),
+                r"\textnormal{Hourly Mean Wind Speed, Vz} & " + _render_value(input_dict, KEY_WL_HOURLY_MEAN_WIND, r' m/s'),
+                r"\textnormal{Hourly Wind Pressure, Pz} & " + _render_value(input_dict, KEY_WL_HOURLY_WIND_PRESSURE, r' N/m\textsuperscript{2}'),
+                r"\textnormal{Transverse Wind Force} & " + _render_value(input_dict, KEY_WL_TRANSVERSE_WIND_FORCE, r' kN'),
+                r"\textnormal{Longitudinal Wind Force} & " + _render_value(input_dict, KEY_WL_LONGITUDINAL_WIND_FORCE, r' kN'),
+                r"\textnormal{Vertical Wind Force} & " + _render_value(input_dict, KEY_WL_VERTICAL_WIND_FORCE, r' kN'),
+            ]
+        ),
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
+    # --- Table 3.5: Earthquake Load (EL) ---
+    eq_table = make_longtable(
+        r"|L{5.5cm}|p{10.0cm}|",
+        r"\textbf{Earthquake Load (EL) --- per IRC 6}",
+        [r"\textbf{parameter} & \textbf{value}"],
+        "\n".join(
+            row + r" \\[6pt]" + "\n" + r"\hline"
+            for row in [
+                r"\textnormal{Seismic Zone} & " + _render_value(input_dict, 'seismic_zone') + r" [from Project Location]",
+                r"\textnormal{Zone Factor, Z} & " + _render_value(input_dict, KEY_SL_ZONE_FACTOR),
+                r"\textnormal{Importance Factor, I} & " + _render_value(input_dict, KEY_SL_IMPORTANCE_FACTOR),
+                r"\textnormal{Type of Soil} & " + _render_value(input_dict, KEY_SL_SOIL_TYPE),
+                r"\textnormal{Sa/g} & " + _render_value(input_dict, KEY_SL_SPECTRAL_COEFF),
+                r"\textnormal{Horizontal Seismic Coefficient, Ah} & " + _render_value(input_dict, KEY_SL_HORIZONTAL_COEFF),
+                r"\textnormal{Vertical Seismic Coefficient, Av} & " + _render_value(input_dict, KEY_SL_VERTICAL_COEFF),
+                r"\textnormal{Horizontal Seismic Force (longitudinal)} & " + '' + r" kN",
+                r"\textnormal{Horizontal Seismic Force (transverse)} & " + '' + r" kN",
+            ]
+        ),
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
+    # --- Table 3.6: Temperature Load (TL) ---
+    tl_table = make_longtable(
+        r"|L{5.5cm}|p{10.0cm}|",
+        r"\textbf{Temperature Load (TL) --- per IRC 6}",
+        [r"\textbf{parameter} & \textbf{value}"],
+        "\n".join(
+            row + r" \\[6pt]" + "\n" + r"\hline"
+            for row in [
+                r"\textnormal{Maximum Shade Temperature} & " + _render_value(input_dict, 'shade_temp_max') + r" $^\circ$C",
+                r"\textnormal{Minimum Shade Temperature} & " + _render_value(input_dict, 'shade_temp_min') + r" $^\circ$C",
+                r"\textnormal{Effective Bridge Temp. Range} & " + _render_value(input_dict, KEY_TL_BRIDGE_TEMP_MIN) + r" to " + _render_value(input_dict, KEY_TL_BRIDGE_TEMP_MAX) + r" $^\circ$C",
+                r"\textnormal{Temperature Rise / Fall for Design} & +" + _render_value(input_dict, KEY_TL_TEMP_RISE) + r" $^\circ$C / \textminus{}" + _render_value(input_dict, KEY_TL_TEMP_FALL) + r" $^\circ$C",
+            ]
+        ),
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
+    # --- Table 3.7: Load Combinations ---
+    lc_table = make_longtable(
+        r"|C{4.0cm}|p{11.5cm}|",
+        r"\textbf{Load Combinations}",
+        [r"\textbf{Combination ID} & \textbf{Load Cases}"],
+        lc_rows_str,
+        header_row_end=r" \\[6pt]",
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
     return r"""
 \chapter{Loads and Load Combinations}
 
@@ -293,18 +384,7 @@ This section summarizes all loads applied to the bridge and the load combination
 """ + dead_load_table + r"""
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Dead Load for Surfacing (DW)}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Wearing Course Load} & """ + (_render_value(input_dict, KEY_WC_MATERIAL)) + r""" x """ + (_render_value(input_dict, KEY_WC_THICKNESS)) + r""" \\[6pt]
-\hline
-\textnormal{Additional SIDL (Crash Barrier)} & """ + (_render_value(input_dict, KEY_CB_LOAD)) + r""" kN/m per barrier \\[6pt]
-\hline
-\textnormal{Railing Load} & """ + (_render_value(input_dict, KEY_RL_LOAD_VALUE)) + r""" kN/m\sdstar{} \\[6pt]
-\hline
-\end{longtable}
+""" + surfacing_table + r"""
 
 \vspace{1em}
 \begin{longtable}{|L{5.5cm}|p{10.0cm}|}
@@ -323,79 +403,16 @@ This section summarizes all loads applied to the bridge and the load combination
 \end{longtable}
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Wind Load (WL) --- per IRC 6}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Basic Wind Speed, Vb} & """ + (_render_value(input_dict,'wind_speed', ' m/s')) + r""" [from Project Location] \\[6pt]
-\hline
-\textnormal{Terrain Type} & """ + (_render_value(input_dict, KEY_WL_TERRAIN_TYPE)) + r""" \\[6pt]
-\hline
-\textnormal{Average Exposed Height, H (m)} & """ + (_render_value(input_dict, KEY_WL_AVG_EXPOSED_HEIGHT, ' m')) + r""" \\[6pt]
-\hline
-\textnormal{Hourly Mean Wind Speed, Vz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_MEAN_WIND, ' m/s')) + r""" \\[6pt]
-\hline
-\textnormal{Hourly Wind Pressure, Pz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_WIND_PRESSURE, ' N/m\\textsuperscript{2}')) + r""" \\[6pt]
-\hline
-\textnormal{Transverse Wind Force} & """ + (_render_value(input_dict, KEY_WL_TRANSVERSE_WIND_FORCE, ' kN')) + r""" \\[6pt]
-\hline
-\textnormal{Longitudinal Wind Force} & """ + (_render_value(input_dict, KEY_WL_LONGITUDINAL_WIND_FORCE, ' kN')) + r""" \\[6pt]
-\hline
-\textnormal{Vertical Wind Force} & """ + (_render_value(input_dict, KEY_WL_VERTICAL_WIND_FORCE, ' kN')) + r""" \\[6pt]
-\hline
-\end{longtable}
+""" + wind_table + r"""
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Earthquake Load (EL) --- per IRC 6}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Seismic Zone} & """ + (_render_value(input_dict,'seismic_zone')) + r""" [from Project Location] \\[6pt]
-\hline
-\textnormal{Zone Factor, Z} & """ + (_render_value(input_dict, KEY_SL_ZONE_FACTOR)) + r""" \\[6pt]
-\hline
-\textnormal{Importance Factor, I} & """ + (_render_value(input_dict, KEY_SL_IMPORTANCE_FACTOR)) + r""" \\[6pt]
-\hline
-\textnormal{Type of Soil} & """ + (_render_value(input_dict, KEY_SL_SOIL_TYPE)) + r""" \\[6pt]
-\hline
-\textnormal{Sa/g} & """ + (_render_value(input_dict, KEY_SL_SPECTRAL_COEFF)) + r""" \\[6pt]
-\hline
-\textnormal{Horizontal Seismic Coefficient, Ah} & """ + (_render_value(input_dict, KEY_SL_HORIZONTAL_COEFF)) + r""" \\[6pt]
-\hline
-\textnormal{Vertical Seismic Coefficient, Av} & """ + (_render_value(input_dict, KEY_SL_VERTICAL_COEFF)) + r""" \\[6pt]
-\hline
-\textnormal{Horizontal Seismic Force (longitudinal)} & """ + '' + r""" kN \\[6pt]
-\hline
-\textnormal{Horizontal Seismic Force (transverse)} & """ + '' + r""" kN \\[6pt]
-\hline
-\end{longtable}
+""" + eq_table + r"""
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Temperature Load (TL) --- per IRC 6}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Maximum Shade Temperature} & """ + (_render_value(input_dict,'shade_temp_max')) + r""" $^\circ$C \\[6pt]
-\hline
-\textnormal{Minimum Shade Temperature} & """ + (_render_value(input_dict,'shade_temp_min')) + r""" $^\circ$C \\[6pt]
-\hline
-\textnormal{Effective Bridge Temp. Range} & """ + (_render_value(input_dict, KEY_TL_BRIDGE_TEMP_MIN)) + r""" to """ + (_render_value(input_dict, KEY_TL_BRIDGE_TEMP_MAX)) + r""" $^\circ$C \\[6pt]
-\hline
-\textnormal{Temperature Rise / Fall for Design} & +""" + (_render_value(input_dict, KEY_TL_TEMP_RISE)) + r""" $^\circ$C / \textminus{}""" + (_render_value(input_dict, KEY_TL_TEMP_FALL)) + r""" $^\circ$C \\[6pt]
-\hline
-\end{longtable}
+""" + tl_table + r"""
 
 \vspace{1em}
-\begin{longtable}{|C{4.0cm}|p{11.5cm}|}
-\caption{\textbf{Load Combinations}}
-\hline
-\textbf{Combination ID} & \textbf{Load Cases} \\[6pt]
-\hline
-""" + lc_rows_str + r"""
-\end{longtable}
+""" + lc_table + r"""
 
 \noindent\textit{Note: All IRC 6 load combinations are auto-generated by OsdagBridge. User-defined custom combinations, if any, are appended.}
 """
