@@ -54,6 +54,7 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex, _render_value
+from osdagbridge.core.reports.table_utils import make_longtable
 
 def ch3_loads(input_dict):
     # Live load vehicle names mapping
@@ -266,24 +267,30 @@ def ch3_loads(input_dict):
 
     lc_rows_str = "\n".join(lc_rows)
 
+    # --- Table 3.1: Dead Load / Self Weight ---
+    dead_load_table = make_longtable(
+        r"|L{5.5cm}|p{10.0cm}|",
+        r"\textbf{Dead Load -- Self Weight}",
+        [r"\textbf{parameter} & \textbf{value}"],
+        "\n".join(
+            row + r" \\[6pt]" + "\n" + r"\hline"
+            for row in [
+                r"\textnormal{Steel Self-Weight Applied} & " + _render_value(input_dict, KEY_MATERIAL_GIRDER_DENSITY, r' kN/m\textsuperscript{3}'),
+                r"\textnormal{Concrete Deck Weight} & " + _render_value(input_dict, KEY_MATERIAL_DECK_DENSITY, r' kN/m\textsuperscript{3}'),
+                r"\textnormal{Self-Weight Factor} & " + _render_value(input_dict, KEY_PL_SELF_WEIGHT_FACTOR),
+            ]
+        ),
+        pre=r"\hline",
+        post=r"\hline",
+    )
+
     return r"""
 \chapter{Loads and Load Combinations}
 
 This section summarizes all loads applied to the bridge and the load combinations considered for analysis and design.
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Dead Load -- Self Weight}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Steel Self-Weight Applied} & """ + (_render_value(input_dict, KEY_MATERIAL_GIRDER_DENSITY, ' kN/m\\textsuperscript{3}')) + r""" \\[6pt]
-\hline
-\textnormal{Concrete Deck Weight} & """ + (_render_value(input_dict, KEY_MATERIAL_DECK_DENSITY, ' kN/m\\textsuperscript{3}')) + r""" \\[6pt]
-\hline
-\textnormal{Self-Weight Factor} & """ + (_render_value(input_dict, KEY_PL_SELF_WEIGHT_FACTOR)) + r""" \\[6pt]
-\hline
-\end{longtable}
+""" + dead_load_table + r"""
 
 \vspace{1em}
 \begin{longtable}{|L{5.5cm}|p{10.0cm}|}
