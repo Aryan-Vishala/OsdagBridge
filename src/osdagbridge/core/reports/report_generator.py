@@ -203,8 +203,12 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 % Prevent tables from overflowing past the page bottom:
 % if fewer than 5 baseline-skips remain, break to the next page first.
+% Use \Needspace (not \needspace) before longtables: the lowercase version
+% inserts stretchable glue around a penalty -100 that TeX may later prefer as a
+% break point after \LT@output is active, orphaning the longtable's head row
+% on the next page (e.g. a lone "parameter | value" line).
 \BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
+\BeforeBeginEnvironment{longtable}{\Needspace{5\baselineskip}}
 
 \definecolor{osdagGreen}{HTML}{91B014}
 
