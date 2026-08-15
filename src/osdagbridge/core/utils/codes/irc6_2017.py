@@ -888,19 +888,27 @@ class IRC6_2017:
     def cl_211_2_braking_force(design_lanes):
         """
         Returns braking force as per IRC:6-2017 Clause 211.2.
+
+        For single- or two-lane bridges: 20% of the first train of load
+        plus 10% of a succeeding train in the same lane.
+        For bridges with more than two lanes: as above for the first two
+        lanes, plus 5% for each additional lane.
+
         Returns:
             float: Braking force in t (rounded to 3 decimal places)
         """
-        for lane in range(1, design_lanes + 1):
-            if lane == 1 or lane == 2:
-                wheel_load = IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']
-                braking_force_1 = 0.20 * sum(wheel_load)  # t
-            if lane > 2:
-                wheel_load = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']
-                braking_force_2 = 0.05 * sum(wheel_load)  # t
-            
-            total_braking_force = braking_force_1 + braking_force_2
-        return round(total_braking_force, 3)
+        # wheel_loads are stored in the internal unit scale (tonne-force
+        # multiplier `t`), so dividing by `t` recovers the load in tonnes.
+        class_a_total  = sum(IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']) / t
+        class_70r_total = sum(IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']) / t
+
+        lanes = int(design_lanes) if design_lanes not in (None, "") else 0
+        if lanes < 1:
+            return 0.0
+        braking = 0.20 * class_a_total + 0.10 * class_a_total
+        if lanes > 2:
+            braking += 0.05 * class_70r_total * (lanes - 2)
+        return round(braking, 3)
     
     @staticmethod
     def cl_211_3_braking_force_location():
