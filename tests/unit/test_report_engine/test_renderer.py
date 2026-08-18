@@ -131,7 +131,7 @@ class TestRenderTable:
         tex = self.renderer._render_table(t)
         assert r"\Needspace{5\baselineskip}" in tex
 
-    def test_keep_together(self):
+    def test_keep_together_ignored_for_table(self):
         t = Table(
             caption="Together",
             columns=[Column("H")],
@@ -139,15 +139,14 @@ class TestRenderTable:
             layout=LayoutHints(keep_together=True),
         )
         tex = self.renderer._render_table(t)
-        assert r"\begin{minipage}[t]{\textwidth}" in tex
-        assert r"\end{minipage}" in tex
+        assert r"\begin{minipage}" not in tex  # Tables should not use minipage anymore
 
     def test_no_needspace_when_zero(self):
         t = Table(
             caption="Small",
             columns=[Column("H")],
             rows=[["row"]],
-            layout=LayoutHints(minimum_bottom_clearance_lines=0),
+            layout=LayoutHints(minimum_bottom_clearance_lines=0, keep_caption_with_table=False),
         )
         tex = self.renderer._render_table(t)
         assert r"\Needspace" not in tex

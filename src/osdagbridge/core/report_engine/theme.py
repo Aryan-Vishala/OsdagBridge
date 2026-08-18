@@ -17,6 +17,7 @@ class PageGeometry:
     margin_bottom_mm: float = 25
     margin_left_mm: float = 20
     margin_right_mm: float = 20
+    footer_reserve_mm: float = 15
 
 
 @dataclass(frozen=True)

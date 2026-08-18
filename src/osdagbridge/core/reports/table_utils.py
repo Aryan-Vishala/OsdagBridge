@@ -33,9 +33,6 @@ def make_longtable(col_spec, caption, header_rows, body, *,
         Opaque string emitted after the header rows (before ``\\endfirsthead``).
     """
     header_block = "\n".join(h + header_row_end for h in header_rows)
-    if repeat_header is None:
-        repeat_header = "\n".join(part for part in (pre, header_block, post) if part)
-
     lines = [
         r"\begin{longtable}{" + col_spec + r"}",
         r"\caption{" + caption + r"}",
@@ -46,8 +43,15 @@ def make_longtable(col_spec, caption, header_rows, body, *,
     if post:
         lines.append(post)
     lines.append(r"\endfirsthead")
-    lines.append(repeat_header)
-    lines.append(r"\endhead")
+    
+    if repeat_header is not False:
+        if repeat_header is None or repeat_header is True:
+            rh = "\n".join(part for part in (pre, header_block, post) if part)
+        else:
+            rh = repeat_header
+        lines.append(rh)
+        lines.append(r"\endhead")
+
     if body:
         lines.append(body)
     lines.append(r"\end{longtable}")

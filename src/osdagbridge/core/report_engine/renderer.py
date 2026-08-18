@@ -118,13 +118,16 @@ class LatexRenderer:
         hints = table.layout
         parts: list[str] = []
 
+        # If splittable is False and we want to keep together, we could use minipage,
+        # but longtable doesn't work well in minipage. Using Needspace is safer.
+        # But we'll just respect minimum_bottom_clearance_lines.
         if hints.minimum_bottom_clearance_lines > 0:
             parts.append(
                 f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}"
             )
-
-        if hints.keep_together:
-            parts.append(r"\begin{minipage}[t]{\textwidth}")
+        elif hints.keep_caption_with_table:
+            # Provide at least some Needspace if we want caption to stay with body
+            parts.append(r"\Needspace{4\baselineskip}")
 
         # Build column spec from columns
         col_spec = self._build_col_spec(table)
@@ -144,11 +147,9 @@ class LatexRenderer:
                 body=body,
                 pre=pre,
                 post=r"\hline",
+                repeat_header=hints.repeat_header,
             )
         )
-
-        if hints.keep_together:
-            parts.append(r"\end{minipage}")
 
         if hints.space_after_mm > 0:
             parts.append(f"\\vspace{{{hints.space_after_mm}mm}}")
@@ -227,7 +228,13 @@ class LatexRenderer:
         from .chart_generators import generate_chart
 
         path = generate_chart(chart, self._theme)
-        return (
+        hints = chart.layout
+        parts = []
+        
+        if hints.minimum_bottom_clearance_lines > 0:
+            parts.append(f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}")
+            
+        parts.append(
             r"\begin{figure}[H]"
             + "\n"
             + r"\centering"
@@ -244,11 +251,21 @@ class LatexRenderer:
             + "\n"
             + r"\end{figure}"
         )
+        if hints.space_after_mm > 0:
+            parts.append(f"\\vspace{{{hints.space_after_mm}mm}}")
+            
+        return "\n".join(parts)
 
     def _render_figure(self, figure: Figure) -> str:
+        hints = figure.layout
+        parts = []
+        
+        if hints.minimum_bottom_clearance_lines > 0:
+            parts.append(f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}")
+            
         if figure.path:
             p = figure.path.replace("\\", "/")
-            return (
+            parts.append(
                 r"\begin{figure}[H]"
                 + "\n"
                 + r"\centering"
@@ -265,18 +282,38 @@ class LatexRenderer:
                 + "\n"
                 + r"\end{figure}"
             )
-        # Placeholder when no image is available.
-        return (
-            r"\noindent\fbox{\parbox{0.97\textwidth}{"
-            r"\textit{[ PLACEHOLDER: "
-            + figure.caption
-            + " ]}}}"
-        )
+        else:
+            # Placeholder when no image is available.
+            parts.append(
+                r"\noindent\fbox{\parbox{0.97\textwidth}{"
+                r"\textit{[ PLACEHOLDER: "
+                + figure.caption
+                + " ]}}}"
+            )
+            
+        if hints.space_after_mm > 0:
+            parts.append(f"\\vspace{{{hints.space_after_mm}mm}}")
+            
+        return "\n".join(parts)
 
     def _render_callout(self, callout: Callout) -> str:
+        hints = callout.layout
+        parts = []
+        if hints.minimum_bottom_clearance_lines > 0:
+            parts.append(f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}")
+        if hints.keep_together:
+            parts.append(r"\begin{minipage}{\textwidth}")
+            
         env_map = {"note": "remark", "warning": "warning", "info": "info"}
         env = env_map.get(callout.callout_type, "remark")
-        return f"\\begin{{{env}}}\n{callout.text}\n\\end{{{env}}}"
+        parts.append(f"\\begin{{{env}}}\n{callout.text}\n\\end{{{env}}}")
+        
+        if hints.keep_together:
+            parts.append(r"\end{minipage}")
+        if hints.space_after_mm > 0:
+            parts.append(f"\\vspace{{{hints.space_after_mm}mm}}")
+            
+        return "\n".join(parts)
 
     # ------------------------------------------------------------------
     # Preamble  (auto-generated from the immutable theme)
@@ -286,6 +323,14 @@ class LatexRenderer:
         pg = self._theme.page
         ts = self._theme.table_styles.get("default", self._theme.table_styles["default"])
         cl = self._theme.colors
+        
+        # Configure footer reserve correctly
+        # The footskip is typically the distance from the bottom of the text body to the footer.
+        # We ensure bottom margin is the physical margin from the paper edge.
+        # includeheadfoot can be omitted if we just set bottom = margin_bottom_mm and footskip = footer_reserve_mm.
+        # Actually, bottom=25mm means body ends 25mm above page bottom.
+        # If footer_reserve_mm is 15mm, we can set bottom=margin_bottom_mm, footskip=footer_reserve_mm
+        
         return (
             r"\documentclass[11pt,a4paper]{report}"
             "\n"
@@ -293,18 +338,19 @@ class LatexRenderer:
             f"top={pg.margin_top_mm}mm,"
             f"bottom={pg.margin_bottom_mm}mm,"
             f"left={pg.margin_left_mm}mm,"
-            f"right={pg.margin_right_mm}mm"
+            f"right={pg.margin_right_mm}mm,"
+            f"footskip={pg.footer_reserve_mm}mm"
             r"]{geometry}"
             "\n"
-            r"\usepackage{longtable,booktabs,array}"
+            r"\usepackage{longtable,booktabs,array,multirow,makecell}"
             "\n"
-            r"\usepackage{graphicx}"
+            r"\usepackage{graphicx,float,caption,xcolor,needspace}"
             "\n"
-            r"\usepackage{float}"
+            r"\newenvironment{remark}{\noindent\textbf{Note: }}{}"
             "\n"
-            r"\usepackage{needspace}"
+            r"\newenvironment{warning}{\noindent\textbf{\textcolor{orange}{Warning: }}}{}"
             "\n"
-            r"\usepackage{xcolor}"
+            r"\newenvironment{info}{\noindent\textbf{Info: }}{}"
             "\n"
             r"\definecolor{primary}{" + cl.primary + "}"
             "\n"
@@ -312,4 +358,5 @@ class LatexRenderer:
             "\n"
             r"\setlength{\tabcolsep}{" + str(ts.column_padding_pt) + "pt}"
             "\n"
+            r"\begin{document}"
         )
