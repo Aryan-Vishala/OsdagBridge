@@ -14,6 +14,9 @@ from ..facts import (
     ReportFacts,
     ShearConnectorData,
     DeckDesignData,
+    CrossBracingData,
+    EndDiaphragmData,
+    OverallSummaryData,
 )
 
 
@@ -482,6 +485,140 @@ def _build_table_5_17g(dk: DeckDesignData) -> Table:
 # ---------------------------------------------------------------------------
 
 
+
+# ---------------------------------------------------------------------------
+# Phase 5C: Cross Bracing, End Diaphragm, and Overall Summary
+# ---------------------------------------------------------------------------
+
+def _build_table_5_20a(cb: CrossBracingData | None) -> Table:
+    cols = [
+        Column("Panel"), Column("Member"), Column("Connection"), Column("Section"),
+        Column("$A_g$ (mm$^2$)"), Column("$r_{min}$ (mm)")
+    ]
+    if not cb or not cb.panels:
+        return Table(caption="End Diaphragm --- Connection and Section Properties", columns=cols, rows=[["---"] * 6])
+    
+    rows = []
+    for p in cb.panels:
+        for m_name, m_label in [("diagonal", "Diagonal"), ("chord", "Chord")]:
+            mem = p.diagonal_tension if m_name == "diagonal" else p.chord_tension
+            if not mem: mem = p.diagonal_compression if m_name == "diagonal" else p.chord_compression
+            if not mem: continue
+            
+            rows.append([
+                p.pair_label, m_label, mem.connection_type or "---", mem.section or "---",
+                "---", "---"  # Ag and rmin are not currently preserved by legacy extract
+            ])
+            
+    return Table(caption=r"\textbf{Cross Bracing --- Connection and Section Properties}", columns=cols, rows=rows)
+
+def _build_table_5_20b(cb: CrossBracingData | None) -> Table:
+    cols = [
+        Column("Panel"), Column("Member"), Column("Nature"),
+        Column("Eff. Length $KL$ (mm)"), Column("$KL/r$"), Column("Limit / Status")
+    ]
+    if not cb or not cb.panels:
+        return Table(caption="End Diaphragm --- Slenderness Ratio Check", columns=cols, rows=[["---"] * 6])
+    
+    rows = []
+    for p in cb.panels:
+        ur_str = f"{p.slenderness_ur:.2f}" if p.slenderness_ur is not None else "---"
+        rows.append([p.pair_label, "---", "---", "---", "---", f"UR={ur_str} " + _fmt_status(p.slenderness_status)])
+        
+    return Table(caption=r"\textbf{Cross Bracing --- Slenderness Ratio Check}", columns=cols, rows=rows)
+
+def _build_table_5_20c(cb: CrossBracingData | None) -> Table:
+    cols = [
+        Column("Panel"), Column("Member"), Column("Section"),
+        Column("Governing LC"), Column("Demand (kN)"), Column("Capacity (kN)"),
+        Column("UR"), Column("Status")
+    ]
+    if not cb or not cb.panels:
+        return Table(caption=r"\textbf{Cross Bracing Design --- Capacity Summary}", columns=cols, rows=[["---"] * 8])
+        
+    rows = []
+    for p in cb.panels:
+        for force_type in ["tension", "compression"]:
+            best = None
+            m_label = ""
+            for m_name, m_attr in [("Diagonal", p.diagonal_tension if force_type == "tension" else p.diagonal_compression),
+                                   ("Chord", p.chord_tension if force_type == "tension" else p.chord_compression)]:
+                if m_attr and m_attr.ur is not None:
+                    if best is None or m_attr.ur > best.ur:
+                        best = m_attr
+                        m_label = m_name
+            if best:
+                rows.append([
+                    p.pair_label, f"{m_label} ({force_type.title()})", best.section or "---",
+                    best.governing_lc or "---", _fmt_qv(best.demand), _fmt_qv(best.capacity),
+                    _fmt_ratio(best.ur), _fmt_status(best.status)
+                ])
+                
+    if not rows:
+        rows = [["---"] * 8]
+        
+    return Table(caption=r"\textbf{Cross Bracing Design --- Capacity Summary}", columns=cols, rows=rows)
+
+def _build_table_5_21(ed: EndDiaphragmData | None) -> Table:
+    cols = [
+        Column("Panel"), Column("Member"), Column("Section"),
+        Column("Governing LC"), Column("Demand (kN)"), Column("Capacity (kN)"),
+        Column("UR"), Column("Status")
+    ]
+    if not ed or not ed.panels:
+        return Table(caption=r"\textbf{End Diaphragm Design --- Capacity Summary}", columns=cols, rows=[["---"] * 8])
+        
+    rows = []
+    for p in ed.panels:
+        for force_type in ["tension", "compression"]:
+            best = None
+            m_label = ""
+            for m_name, m_attr in [("Diagonal", p.diagonal_tension if force_type == "tension" else p.diagonal_compression),
+                                   ("Chord", p.chord_tension if force_type == "tension" else p.chord_compression)]:
+                if m_attr and m_attr.ur is not None:
+                    if best is None or m_attr.ur > best.ur:
+                        best = m_attr
+                        m_label = m_name
+            if best:
+                rows.append([
+                    p.pair_label, f"{m_label} ({force_type.title()})", best.section or "---",
+                    best.governing_lc or "---", _fmt_qv(best.demand), _fmt_qv(best.capacity),
+                    _fmt_ratio(best.ur), _fmt_status(best.status)
+                ])
+                
+    if not rows:
+        rows = [["---"] * 8]
+        
+    return Table(caption=r"\textbf{End Diaphragm Design --- Capacity Summary}", columns=cols, rows=rows)
+
+def _build_table_5_22(summary: OverallSummaryData | None) -> Table:
+    cols = [
+        Column("Check / Member", "L{4.5cm}"), Column("Governing LC", "L{5.0cm}"),
+        Column("Demand"), Column("Capacity"), Column("UR", "C{1.5cm}"), Column("Status")
+    ]
+    if not summary:
+        return Table(caption="Overall Design Check Summary", columns=cols, rows=[["---"] * 6])
+        
+    rows = []
+    for comp in (summary.girders, summary.deck, summary.cross_bracing, summary.end_diaphragm):
+        if not comp: continue
+        for r in comp.records:
+            rows.append([
+                r.label,
+                r.governing_lc or "---",
+                _fmt_qv_unit(r.demand),
+                _fmt_qv_unit(r.capacity),
+                _fmt_ratio(r.ur),
+                _fmt_status(r.status)
+            ])
+            
+    return Table(
+        caption=r"\textbf{Overall Design Check Summary (Table 5.22)}",
+        columns=cols,
+        rows=rows,
+        label="tab:ch5_overall_summary"
+    )
+
 def build_chapter_5(facts: ReportFacts) -> Chapter:
     """Build Chapter 5: Design Checks.
 
@@ -556,6 +693,38 @@ def build_chapter_5(facts: ReportFacts) -> Chapter:
             components.append(_build_table_5_17g(dk))
             components.append(RawLatex(r"\vspace{1em}"))
             
+
+        cb = gd.cross_bracing
+        ed = gd.end_diaphragm
+        summary = gd.summary
+        
+        if cb and cb.panels:
+            components.append(RawLatex(r"\section{Cross Bracing Design}"))
+            components.append(RawLatex(r"\label{sec:cross-bracing}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_20a(cb))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_20b(cb))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_20c(cb))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+        if ed:
+            components.append(RawLatex(r"\section{End Diaphragm Design}"))
+            components.append(RawLatex(r"\label{sec:end-diaphragm}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_21(ed))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+        if summary:
+            components.append(RawLatex(r"\section{Overall Design Check Summary}"))
+            components.append(RawLatex(r"\label{sec:overall-summary}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_22(summary))
+            components.append(RawLatex(r"\vspace{4.0mm}"))
+            if summary.end_diaphragm and summary.end_diaphragm.status == CheckStatus.UNAVAILABLE:
+                components.append(RawLatex(r"\noindent\textit{Note: End Diaphragm rolled/welded section design to be added.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
     else:
         # Fallback: delegate to legacy ch5_design_checks
         from osdagbridge.core.reports.chap5 import ch5_design_checks

@@ -598,6 +598,7 @@ class SummaryCheckRecord:
     ur: Optional[float]
     status: CheckStatus
     governing_lc: Optional[str]
+    note: Optional[str] = None
 
 @dataclass(frozen=True)
 class ComponentSummary:
