@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from osdagbridge.core.report_engine.document import (
-    Chapter, Column, RawLatex, Section, Table
+    Chapter, Column, Chart, RawLatex, Section, Table
 )
 from osdagbridge.core.report_engine.facts import (
     MaterialFacts, TakeoffItem, QuantityValue, ReportFacts
@@ -109,6 +109,65 @@ def _build_table_7_1(facts: MaterialFacts) -> Table:
         rows=rows,
     )
 
+def _build_charts(facts: MaterialFacts) -> list[Chart]:
+    """Builds the 3 material charts (Requirement 5C)."""
+    charts = []
+
+    # 1. Structural Steel Quantities (MT)
+    steel = facts.structural_steel
+    girders_wt = steel.girders.total_weight.value if steel.girders and steel.girders.total_weight else None
+    
+    cb_wts = [
+        getattr(getattr(steel, attr), "total_weight").value if getattr(steel, attr) and getattr(getattr(steel, attr), "total_weight") else None
+        for attr in ["cross_bracing_top", "cross_bracing_bot", "cross_bracing_diag"]
+    ]
+    # Sum them if any exist; if all are None, cb_wt is None. But wait! If some are missing?
+    # If all 3 are None, cross_bracing is unavailable (None).
+    if all(w is None for w in cb_wts):
+        cb_wt = None
+    else:
+        cb_wt = sum(w for w in cb_wts if w is not None)
+
+    ed_wt = steel.end_diaphragms.total_weight.value if steel.end_diaphragms and steel.end_diaphragms.total_weight else None
+
+    chart_steel = Chart(
+        title="Structural Steel Quantities",
+        chart_type="bar",
+        data={
+            "Girders": girders_wt,
+            "Cross Bracing": cb_wt,
+            "End Diaphragms": ed_wt
+        },
+        y_label="Weight (MT)"
+    )
+    charts.append(chart_steel)
+
+    # 2. Concrete Volume (m³)
+    concrete_vol = facts.concrete_volume.total_volume.value if facts.concrete_volume and facts.concrete_volume.total_volume else None
+    chart_concrete = Chart(
+        title="Concrete Volume",
+        chart_type="bar",
+        data={
+            "Concrete Deck Slab": concrete_vol
+        },
+        y_label="Volume (m³)"
+    )
+    charts.append(chart_concrete)
+
+    # 3. Reinforcement Steel (MT)
+    rebar_wt = facts.reinforcement_steel.total_weight.value if facts.reinforcement_steel and facts.reinforcement_steel.total_weight else None
+    chart_rebar = Chart(
+        title="Reinforcement Steel",
+        chart_type="bar",
+        data={
+            "Reinforcement Steel": rebar_wt
+        },
+        y_label="Weight (MT)"
+    )
+    charts.append(chart_rebar)
+
+    return charts
+
 def build_chapter_7(facts: ReportFacts) -> Chapter:
     # Get MaterialFacts from ReportFacts if available.
     # Currently, MaterialFacts is built in report_generator.py and needs to be accessible in ReportFacts
@@ -122,6 +181,10 @@ def build_chapter_7(facts: ReportFacts) -> Chapter:
     components = [
         _build_table_7_1(mat_facts)
     ]
+    
+    # Add charts
+    components.extend(_build_charts(mat_facts))
+    
     return Chapter(
         number=7,
         title="Material Take-off \\& Quantity Summary",

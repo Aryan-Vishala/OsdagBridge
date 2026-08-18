@@ -192,6 +192,75 @@ class TestBuildChapter7:
         table = ch.sections[0].components[0]
         assert len(table.rows) == 9 # 9 rows for items 1-6 including subitems
 
+    def test_returns_chapter_with_charts(self):
+        facts = _make_facts(raw_input_dict={"typical_section.no_of_girders": "4"})
+        from osdagbridge.core.report_engine.chapters.ch7_document import build_chapter_7
+        from osdagbridge.core.report_engine.document import Chart
+        
+        ch = build_chapter_7(facts)
+        
+        charts = [c for c in ch.sections[0].components if isinstance(c, Chart)]
+        assert len(charts) == 3
+        
+        assert charts[0].title == "Structural Steel Quantities"
+        assert "Girders" in charts[0].data
+        assert "Cross Bracing" in charts[0].data
+        assert "End Diaphragms" in charts[0].data
+        
+        assert charts[1].title == "Concrete Volume"
+        assert "Concrete Deck Slab" in charts[1].data
+        
+        assert charts[2].title == "Reinforcement Steel"
+        assert "Reinforcement Steel" in charts[2].data
+
+    def test_charts_handle_missing_end_diaphragm(self):
+        # We need to explicitly manipulate MaterialFacts to set end_diaphragm to None.
+        facts = _make_facts()
+        from osdagbridge.core.report_engine.chapters.ch7_document import build_chapter_7
+        from osdagbridge.core.report_engine.facts.material_takeoff import build_material_facts
+        mat_facts = build_material_facts(facts.raw_input_dict or {}, facts.raw_output_dict or {})
+        
+        # End diaphragm should be None natively because input_dict has no end diaphragm.
+        assert mat_facts.structural_steel.end_diaphragms is None
+        
+        # Override the property
+        facts = _make_facts()
+        # Set material_facts attribute dynamically
+        setattr(facts, "material_facts", mat_facts)
+        
+        ch = build_chapter_7(facts)
+        from osdagbridge.core.report_engine.document import Chart
+        charts = [c for c in ch.sections[0].components if isinstance(c, Chart)]
+        
+        assert charts[0].data["End Diaphragms"] is None
+
+    def test_charts_preserve_genuine_zeros(self):
+        facts = _make_facts()
+        from osdagbridge.core.report_engine.chapters.ch7_document import build_chapter_7
+        from osdagbridge.core.report_engine.facts import MaterialFacts, StructuralSteelTakeoff, TakeoffItem, QuantityValue
+        
+        # Create a MaterialFacts with a genuine 0.0 quantity
+        zero_item = TakeoffItem("Zero Item", None, 0, None, None, QuantityValue(0.0, "MT"), None)
+        mat_facts = MaterialFacts(
+            structural_steel=StructuralSteelTakeoff(
+                zero_item, zero_item, zero_item, zero_item, zero_item
+            ),
+            concrete_volume=None,
+            reinforcement_steel=None,
+            shear_studs=None,
+            crash_barrier=None
+        )
+        setattr(facts, "material_facts", mat_facts)
+        
+        ch = build_chapter_7(facts)
+        from osdagbridge.core.report_engine.document import Chart
+        charts = [c for c in ch.sections[0].components if isinstance(c, Chart)]
+        
+        assert charts[0].data["Girders"] == 0.0
+        assert charts[0].data["End Diaphragms"] == 0.0
+        assert charts[1].data["Concrete Deck Slab"] is None
+        assert charts[2].data["Reinforcement Steel"] is None
+
 
 # ---------------------------------------------------------------------------
 # Chapter 5
