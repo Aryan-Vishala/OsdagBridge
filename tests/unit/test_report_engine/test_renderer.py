@@ -166,7 +166,7 @@ class TestRenderTable:
         t = Table(
             caption="Test",
             columns=[
-                Column("Name", width="5cm"),
+                Column("Name", width="L{5cm}"),
                 Column("Value"),
             ],
             rows=[],

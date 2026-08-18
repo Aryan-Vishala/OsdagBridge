@@ -90,6 +90,14 @@ from . import (
     GirderStiffenerSummary,
     GirderStressCheck,
     QuantityValue,
+    ShearConnectorSpacing,
+    ShearConnectorData,
+    DeckLoadingGeometry,
+    DeckFlexureCheck,
+    DeckShearCheck,
+    DeckCrackWidthCheck,
+    DeckDetailingCheck,
+    DeckDesignData,
 )
 
 # ---------------------------------------------------------------------------
@@ -516,11 +524,8 @@ def _build_girder_summary(od: dict, gi: int) -> GirderDesignSummary:
 def build_girder_design_data(
     output_dict: dict,
     input_dict: dict,
-) -> DesignCheckData:
-    """Extract girder design check data from output_dict + input_dict.
-
-    Phase 5A: produces GirderDesignData for Tables 5.1–5.13 only.
-    """
+) -> tuple[GirderDesignData, ...]:
+    """Extract girder design check data from output_dict + input_dict."""
     od = output_dict
     entries = _girder_entries(input_dict)
     is_custom = (
@@ -565,4 +570,264 @@ def build_girder_design_data(
             )
         )
 
-    return DesignCheckData(girders=tuple(girders))
+    return tuple(girders)
+
+def build_shear_connector_data(
+    output_dict: dict,
+    input_dict: dict,
+) -> Optional[ShearConnectorData]:
+    """Extract Shear Connector data (Tables 5.14-5.16)."""
+    from osdagbridge.core.utils.common import (
+        KEY_SD_SC_Qu_kN, KEY_SD_SC_Qr_kN,
+        KEY_SD_SC_SL1, KEY_SD_SC_SL2, KEY_SD_SC_SR,
+        KEY_SD_TS_VL, KEY_SD_TS_VRD,
+        KEY_SD_SC_D_LIMIT, KEY_SD_SC_EDGE_DIST, KEY_SD_SC_REQ_EDGE_DIST,
+        KEY_DS_STUD_DIAMETER
+    )
+    
+    dr = output_dict.get("design_results", {}) or {}
+    
+    # Check if SC was run (Qu exists)
+    if KEY_SD_SC_Qu_kN not in dr:
+        return None
+
+    qu = _safe_float(dr.get(KEY_SD_SC_Qu_kN))
+    qr = _safe_float(dr.get(KEY_SD_SC_Qr_kN))
+
+    sc_prov = _safe_float(dr.get("stud_spacing_provided_mm"))
+    sc_prov_qv = _qv(sc_prov, "mm")
+
+    def _sp(req_val):
+        rv = _safe_float(req_val)
+        status = CheckStatus.UNAVAILABLE
+        if rv is not None and sc_prov is not None:
+            status = CheckStatus.PASS if sc_prov <= rv else CheckStatus.FAIL
+        return ShearConnectorSpacing(required=_qv(rv, "mm"), provided=sc_prov_qv, status=status)
+
+    sl1 = _sp(dr.get(KEY_SD_SC_SL1))
+    sl2 = _sp(dr.get(KEY_SD_SC_SL2))
+    sr = _sp(dr.get(KEY_SD_SC_SR))
+    smax = _sp(dr.get("stud_spacing_max_mm"))
+
+    vl = _safe_float(dr.get(KEY_SD_TS_VL))
+    vrd = _safe_float(dr.get(KEY_SD_TS_VRD))
+    
+    ts_ur = None
+    if vl is not None and vrd is not None and vrd > 0:
+        ts_ur = vl / vrd
+        
+    ts_ok = dr.get("transverse_shear_ok")
+    if ts_ok is True:
+        ts_status = CheckStatus.PASS
+    elif ts_ok is False:
+        ts_status = CheckStatus.FAIL
+    else:
+        ts_status = CheckStatus.UNAVAILABLE
+
+    ast_req = _safe_float(dr.get("Ast_required_cm2_per_m"))
+    
+    dd_516 = output_dict.get("deck_design_results", {}) or {}
+    ast_prov = None
+    try:
+        bot = float(dd_516.get("rebar_bottom_area") or 0)
+        top = float(dd_516.get("rebar_top_area") or 0)
+        ast_prov = (bot + top) / 100.0
+    except (TypeError, ValueError):
+        pass
+
+    reinf_status = CheckStatus.UNAVAILABLE
+    if ast_req is not None and ast_prov is not None:
+        reinf_status = CheckStatus.PASS if ast_prov >= ast_req else CheckStatus.FAIL
+
+    stud_d = _safe_float(input_dict.get(KEY_DS_STUD_DIAMETER))
+    d_lim = _safe_float(dr.get(KEY_SD_SC_D_LIMIT))
+    diam_status = CheckStatus.UNAVAILABLE
+    if stud_d is not None and d_lim is not None:
+        diam_status = CheckStatus.PASS if stud_d <= d_lim else CheckStatus.FAIL
+
+    edge_prov = _safe_float(dr.get(KEY_SD_SC_EDGE_DIST))
+    edge_req = _safe_float(dr.get(KEY_SD_SC_REQ_EDGE_DIST))
+    edge_status = CheckStatus.UNAVAILABLE
+    if edge_prov is not None and edge_req is not None:
+        edge_status = CheckStatus.PASS if edge_prov >= edge_req else CheckStatus.FAIL
+
+    return ShearConnectorData(
+        design_resistance_qu=_qv(qu, "kN"),
+        fatigue_resistance_qr=_qv(qr, "kN"),
+        uls_shear=sl1,
+        full_composite=sl2,
+        sls_fatigue=sr,
+        max_limit=smax,
+        vl_longitudinal=_qv(vl, "kN/m"),
+        vrd_capacity=_qv(vrd, "kN/m"),
+        transverse_ur=ts_ur,
+        transverse_status=ts_status,
+        min_transverse_reinf_req=_qv(ast_req, "cm^2/m"),
+        min_transverse_reinf_prov=_qv(ast_prov, "cm^2/m"),
+        reinf_status=reinf_status,
+        stud_diameter=_qv(stud_d, "mm"),
+        stud_diameter_limit=_qv(d_lim, "mm"),
+        diameter_status=diam_status,
+        edge_dist_prov=_qv(edge_prov, "mm"),
+        edge_dist_req=_qv(edge_req, "mm"),
+        edge_dist_status=edge_status
+    )
+
+def build_deck_design_data(
+    output_dict: dict,
+    input_dict: dict,
+) -> Optional[DeckDesignData]:
+    """Extract Deck Design data (Tables 5.17a-g)."""
+    from osdagbridge.core.utils import common as c
+    
+    deck_rpt = output_dict.get("deck_report_values", {}) or {}
+    is_designed = bool(deck_rpt)
+    
+    if not is_designed:
+        return DeckDesignData(is_designed=False)
+        
+    def _dkv(key, default=0.0):
+        v = deck_rpt.get(key)
+        if v is None or v == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    # --- Loading Geometry ---
+    loading = DeckLoadingGeometry(
+        effective_span=_qv(_dkv(c.KEY_DD_SPAN), "m"),
+        thickness=_qv(_safe_float(input_dict.get(c.KEY_TS_DECK_THICKNESS)), "mm"),
+        concrete_grade=str(input_dict.get(c.KEY_DECK_CONCRETE_GRADE_BASIC) or ""),
+        fck=None, # chap5.py shows fck is derived inside IRC112, but we don't display it directly? Wait, legacy says `Concrete Grade: M40`. It doesn't show fck.
+        reinf_grade=str(input_dict.get(c.KEY_DS_REINF_MATERIAL) or ""),
+        fy=_qv(_dkv(c.KEY_DD_FY), "MPa"),
+        dead_load=_qv(_dkv(c.KEY_DD_WDL), "kN/m^2"),
+        wheel_load=_qv(_dkv(c.KEY_DD_WHEEL_LOAD), "kN"),
+        tyre_width=_qv(_dkv(c.KEY_DD_TYRE_WIDTH, 0.0) * 1000.0, "mm"),
+        impact_factor=_dkv(c.KEY_DD_IMPACT_FACTOR, 1.0) - 1.0, # 1 + IF is stored
+        vehicle=str(deck_rpt.get(c.KEY_DD_VEHICLE) or "")
+    )
+    
+    # --- Flexure Check ---
+    has_oh = bool(deck_rpt.get(c.KEY_DD_HAS_OVERHANG))
+    m_sag_dem = _dkv(c.KEY_DD_M_ULS_SAG)
+    m_sag_cap = _dkv(c.KEY_DD_MU_BOT)
+    sag_status = CheckStatus.PASS if m_sag_cap >= m_sag_dem else CheckStatus.FAIL
+    
+    m_hog_dem = _dkv(c.KEY_DD_M_ULS_HOG)
+    m_hog_cap = _dkv(c.KEY_DD_MU_TOP)
+    hog_status = CheckStatus.PASS if m_hog_cap >= m_hog_dem else CheckStatus.FAIL
+    
+    oh_dem = _dkv(c.KEY_DD_M_ULS_OH) if has_oh else None
+    oh_cap = _dkv(c.KEY_DD_MU_OH) if has_oh else None
+    oh_status = CheckStatus.UNAVAILABLE
+    if has_oh and oh_dem is not None and oh_cap is not None:
+        oh_status = CheckStatus.PASS if oh_cap >= oh_dem else CheckStatus.FAIL
+
+    flexure = DeckFlexureCheck(
+        demand_sagging=_qv(m_sag_dem, "kNm/m"),
+        capacity_sagging=_qv(m_sag_cap, "kNm/m"),
+        status_sagging=sag_status,
+        demand_hogging=_qv(m_hog_dem, "kNm/m"),
+        required_top_steel=_qv(_dkv(c.KEY_DD_AS_REQ_TOP), "mm^2/m"),
+        capacity_hogging=_qv(m_hog_cap, "kNm/m"),
+        status_hogging=hog_status,
+        has_overhang=has_oh,
+        overhang_length=_qv(_safe_float(input_dict.get(c.KEY_TS_DECK_OVERHANG)), "mm"),
+        demand_overhang=_qv(oh_dem, "kNm/m"),
+        capacity_overhang=_qv(oh_cap, "kNm/m"),
+        status_overhang=oh_status
+    )
+    
+    # --- Shear Check ---
+    punch_vrdc = _dkv(c.KEY_DD_VRD_C_MPA)
+    punch_ved = _dkv(c.KEY_DD_PUNCH_VED)
+    punch_ur = punch_ved / punch_vrdc if punch_vrdc > 0 else None
+    punch_ok = deck_rpt.get(c.KEY_DD_PUNCH_OK)
+    punch_status = CheckStatus.PASS if punch_ok else CheckStatus.FAIL
+    
+    ow_ved = _dkv(c.KEY_DD_SHEAR_VED)
+    ow_vrdc = _dkv(c.KEY_DD_SHEAR_VRDC)
+    ow_ur = ow_ved / ow_vrdc if ow_vrdc > 0 else None
+    ow_ok = deck_rpt.get(c.KEY_DD_SHEAR_OK)
+    ow_status = CheckStatus.PASS if ow_ok else CheckStatus.FAIL
+    
+    d_bot = _dkv(c.KEY_DD_D_BOT)
+    k_factor = min(1.0 + (200.0 / d_bot)**0.5, 2.0) if d_bot > 0 else 0.0
+    as_bot = _dkv(c.KEY_DD_AS_BOT)
+    rho_l = min(as_bot / (1000.0 * d_bot), 0.02) if d_bot > 0 else 0.0
+    
+    shear = DeckShearCheck(
+        punching_ved_kn=_qv(_dkv(c.KEY_DD_PUNCH_VED_KN), "kN"),
+        punching_ved_mpa=_qv(punch_ved, "MPa"),
+        punching_vrdc_mpa=_qv(punch_vrdc, "MPa"),
+        punching_ur=punch_ur,
+        punching_status=punch_status,
+        oneway_ved=_qv(ow_ved, "kN/m"),
+        oneway_size_factor_k=k_factor,
+        oneway_rho_l=rho_l,
+        oneway_vrdc=_qv(ow_vrdc, "kN/m"),
+        oneway_ur=ow_ur,
+        oneway_status=ow_status
+    )
+    
+    # --- Crack Width Check ---
+    wks = [_dkv(c.KEY_DD_WK_BOT), _dkv(c.KEY_DD_WK_TOP)]
+    if has_oh:
+        wks.append(_dkv(c.KEY_DD_WK_OH))
+    gov_wk = max(wks)
+    wk_lim = _dkv(c.KEY_DD_WK_LIMIT)
+    wk_status = CheckStatus.PASS if gov_wk <= wk_lim else CheckStatus.FAIL
+    
+    crack_width = DeckCrackWidthCheck(
+        calculated=_qv(gov_wk, "mm"),
+        limit=_qv(wk_lim, "mm"),
+        status=wk_status
+    )
+    
+    # --- Detailing Check ---
+    as_req_bot = _dkv(c.KEY_DD_AS_REQ_BOT)
+    as_req_top = _dkv(c.KEY_DD_AS_REQ_TOP)
+    as_min = _dkv(c.KEY_DD_AS_MIN)
+    req_dist = max(0.20 * as_bot, as_min)
+    
+    as_prov_top = _dkv(c.KEY_DD_AS_TOP)
+    as_prov_dist = _dkv(c.KEY_DD_AS_LONG)
+    
+    detailing = DeckDetailingCheck(
+        required_bottom=_qv(as_req_bot, "mm^2/m"),
+        provided_bottom=_qv(as_bot, "mm^2/m"),
+        required_top=_qv(as_req_top, "mm^2/m"),
+        provided_top=_qv(as_prov_top, "mm^2/m"),
+        required_dist=_qv(req_dist, "mm^2/m"),
+        provided_dist=_qv(as_prov_dist, "mm^2/m"),
+        status_bottom=CheckStatus.PASS if as_bot >= as_req_bot else CheckStatus.FAIL,
+        status_top=CheckStatus.PASS if as_prov_top >= as_req_top else CheckStatus.FAIL,
+        status_dist=CheckStatus.PASS if as_prov_dist >= req_dist else CheckStatus.FAIL
+    )
+    
+    return DeckDesignData(
+        is_designed=True,
+        loading=loading,
+        flexure=flexure,
+        shear=shear,
+        crack_width=crack_width,
+        detailing=detailing
+    )
+
+def build_design_check_data(
+    output_dict: dict,
+    input_dict: dict,
+) -> DesignCheckData:
+    """Build the complete DesignCheckData hierarchy."""
+    girders = build_girder_design_data(output_dict, input_dict)
+    sc_data = build_shear_connector_data(output_dict, input_dict)
+    dk_data = build_deck_design_data(output_dict, input_dict)
+    
+    return DesignCheckData(
+        girders=girders,
+        shear_connectors=sc_data,
+        deck=dk_data
+    )

@@ -12,6 +12,8 @@ from ..facts import (
     GirderDesignData,
     QuantityValue,
     ReportFacts,
+    ShearConnectorData,
+    DeckDesignData,
 )
 
 
@@ -305,7 +307,175 @@ def _build_table_5_13(girders: tuple[GirderDesignData, ...]) -> Table:
             _fmt_status(sm.status),
         ])
     return Table(caption="Girder Design Summary (DCR / Utilization Ratio)", columns=cols, rows=rows)
+    return Table(caption="Girder Design Summary (DCR / Utilization Ratio)", columns=cols, rows=rows)
 
+def _build_table_5_14(sc: ShearConnectorData) -> Table:
+    """Table 5.14 — Shear Connector Capacity."""
+    cols = [
+        Column("Parameter", "L{5.0cm}"),
+        Column("Formula", "L{6.0cm}"),
+        Column("Value", "C{2.5cm}"),
+        Column("Reference", "C{3.0cm}")
+    ]
+    rows = [
+        [
+            r"Design Resistance, $Q_u$",
+            r"\footnotesize\makecell{$Q_u=\min(Q_{u,s},\,Q_{u,c})$\\[3pt]$Q_{u,s}=\dfrac{0.8\,f_u\,(\pi d^2/4)}{\gamma_v}$\\[3pt]$Q_{u,c}=\dfrac{0.29\,\alpha\,d^2\sqrt{f_{ck}\,E_{cm}}}{\gamma_v}$}",
+            _fmt_qv_unit(sc.design_resistance_qu),
+            "IRC 22 Cl. 606.3.1 (Eq. 6.1)"
+        ],
+        [
+            r"Fatigue Shear Resistance, $Q_r$",
+            r"IRC 22 Table 8 ($\phi d$, $N_{sc}$)",
+            _fmt_qv_unit(sc.fatigue_resistance_qr),
+            "IRC 22 Cl. 606.3.2 (Table 8)"
+        ]
+    ]
+    return Table(caption="Shear Connector Capacity (bridge-level)", columns=cols, rows=rows)
+
+def _build_table_5_15(sc: ShearConnectorData) -> Table:
+    """Table 5.15 — Shear Connector Spacing."""
+    cols = [
+        Column("Criterion", "L{3.2cm}"),
+        Column("Governing Spacing", ">{\\centering\\arraybackslash}p{4.3cm}"),
+        Column("Actual Spacing Provided", ">{\\centering\\arraybackslash}p{4.3cm}"),
+        Column("Status", "C{2.0cm}")
+    ]
+    def _r(lbl, sp):
+        return [lbl, _fmt_qv_unit(sp.required), _fmt_qv_unit(sp.provided), _fmt_status(sp.status)]
+    
+    rows = [
+        _r("ULS Shear (SL1)", sc.uls_shear),
+        _r("Full Composite (SL2)", sc.full_composite),
+        _r("SLS Fatigue (SR)", sc.sls_fatigue),
+        _r("Max Spacing Limit (IRC 22)", sc.max_limit),
+    ]
+    return Table(caption="Shear Connector Spacing", columns=cols, rows=rows)
+
+def _build_table_5_16(sc: ShearConnectorData) -> Table:
+    """Table 5.16 — Transverse Shear & Detailing Checks."""
+    cols = [
+        Column("Check", "L{5.3cm}"),
+        Column("Value", ">{\\arraybackslash}p{7.2cm}"),
+        Column("Status", "C{2.0cm}")
+    ]
+    
+    ts_ur_str = "---"
+    if sc.transverse_ur is not None:
+        ts_ur_str = f"{sc.transverse_ur:.2f}"
+    
+    ast_req_str = f"Required {_fmt_qv_unit(sc.min_transverse_reinf_req)}" if sc.min_transverse_reinf_req else "Required ---"
+    ast_prov_str = f"Provided {_fmt_qv_unit(sc.min_transverse_reinf_prov)}" if sc.min_transverse_reinf_prov else "Provided ---"
+    
+    d_val = f"$d$ = {_fmt_qv_unit(sc.stud_diameter)}" if sc.stud_diameter else "$d$ = ---"
+    d_lim = f"$\leq 2t_f$ = {_fmt_qv_unit(sc.stud_diameter_limit)}" if sc.stud_diameter_limit else "$\leq 2t_f$ = ---"
+    
+    edge_prov = f"Provided {_fmt_qv_unit(sc.edge_dist_prov)}" if sc.edge_dist_prov else "Provided ---"
+    edge_req = f"(req. $\geq$ {_fmt_qv_unit(sc.edge_dist_req)})" if sc.edge_dist_req else "(req. $\geq$ ---)"
+
+    rows = [
+        [r"Longitudinal Shear per unit length, $V_L$", _fmt_qv_unit(sc.vl_longitudinal), "---"],
+        [r"Transverse Shear Capacity of Slab, $V_{Rd$}", _fmt_qv_unit(sc.vrd_capacity), "---"],
+        [r"Transverse Shear Check", r"$V_L/V_{Rd}$ = " + ts_ur_str, _fmt_status(sc.transverse_status)],
+        [r"Min. Transverse Reinforcement, $A_{st,min$}", f"{ast_req_str}, {ast_prov_str}", _fmt_status(sc.reinf_status)],
+        [r"Stud Diameter $\leq 2\,t_f$", f"{d_val} {d_lim}", _fmt_status(sc.diameter_status)],
+        [r"Stud Edge Distance", f"{edge_prov} {edge_req}", _fmt_status(sc.edge_dist_status)],
+    ]
+    return Table(caption="Transverse Shear and Detailing Checks", columns=cols, rows=rows)
+
+def _build_table_5_17a(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{7cm}"), Column("Value", ">{\\arraybackslash}p{8.5cm}")]
+    ld = dk.loading
+    
+    rows = [
+        [r"Effective Span", _fmt_qv_unit(ld.effective_span)],
+        [r"Deck Slab Thickness, $t_s$", _fmt_qv_unit(ld.thickness)],
+        [r"Concrete Grade", f"{ld.concrete_grade} ($f_{{ck}}$ = {_fmt_qv_unit(ld.fck)})" if ld.concrete_grade else "---"],
+        [r"Reinforcement Grade", f"{ld.reinf_grade} ($f_y$ = {_fmt_qv_unit(ld.fy)})" if ld.reinf_grade else "---"],
+        [r"Dead Load (incl. surfacing), $w_{DL$}", _fmt_qv_unit(ld.dead_load)],
+        [r"Governing Live Load Vehicle", ld.vehicle if ld.vehicle else "---"],
+        [r"Impact Factor (IF)", f"{ld.impact_factor:.3f}" if ld.impact_factor is not None else "---"],
+        [r"Wheel Load for local design, $P_w$", _fmt_qv_unit(ld.wheel_load)],
+        [r"Tyre Contact Width, $a$", _fmt_qv_unit(ld.tyre_width)],
+    ]
+    return Table(caption="Deck Slab --- Loading and Geometry", columns=cols, rows=rows)
+
+def _build_table_5_17b(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "C{3.5cm}"), Column("Demand", "C{3.5cm}"), Column("Capacity", ">{\\centering\\arraybackslash}p{4.2cm}"), Column("Status", "C{1.8cm}")]
+    fx = dk.flexure
+    rows = [
+        [r"Sagging (Midspan)", _fmt_qv_unit(fx.demand_sagging), r"$M_{Rd}$ = " + _fmt_qv_unit(fx.capacity_sagging), _fmt_status(fx.status_sagging)],
+        [r"Hogging (Support)", _fmt_qv_unit(fx.demand_hogging), r"$M_{Rd}$ = " + _fmt_qv_unit(fx.capacity_hogging), _fmt_status(fx.status_hogging)]
+    ]
+    return Table(caption="Deck Slab --- Flexure Check: Interior Panel", columns=cols, rows=rows)
+
+def _build_table_5_17c(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{5cm}"), Column("Demand", "C{3.0cm}"), Column("Capacity", "C{3.0cm}"), Column("Status", "C{1.8cm}")]
+    fx = dk.flexure
+    if not fx.has_overhang:
+        rows = [["No Overhang", "N/A", "N/A", "---"]]
+    else:
+        rows = [
+            [r"Overhang Length", _fmt_qv_unit(fx.overhang_length), "---", "---"],
+            [r"Total Hogging", _fmt_qv_unit(fx.demand_overhang), r"$M_{Rd,oh}$ = " + _fmt_qv_unit(fx.capacity_overhang), _fmt_status(fx.status_overhang)]
+        ]
+    return Table(caption="Deck Slab --- Cantilever Overhang Flexure Check", columns=cols, rows=rows)
+
+def _build_table_5_17d(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{5.5cm}"), Column("Formula", "C{3.5cm}"), Column("Value", ">{\\centering\\arraybackslash}p{4.5cm}"), Column("Status", "C{2cm}")]
+    sh = dk.shear
+    
+    ur_str = "---"
+    if sh.punching_ur is not None:
+        ur_str = f"{sh.punching_ur:.2f}"
+    
+    rows = [
+        [r"Design Wheel Load (ULS), $V_{Ed$}", r"$\gamma_Q\,(1+IF)\,P_w$", _fmt_qv_unit(sh.punching_ved_kn), "---"],
+        [r"Punching Shear Stress, $v_{Ed$}", r"$V_{Ed} / (u_1\,d)$", _fmt_qv_unit(sh.punching_ved_mpa), "---"],
+        [r"Punching Resistance, $v_{Rd,c$}", r"IRC 112 Eq.\ 10.1", _fmt_qv_unit(sh.punching_vrdc_mpa), "---"],
+        [r"Punching Shear Check", r"$v_{Ed} \leq v_{Rd,c}$", ur_str, _fmt_status(sh.punching_status)],
+    ]
+    return Table(caption="Deck Slab --- Punching Shear Check", columns=cols, rows=rows)
+
+def _build_table_5_17e(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{7cm}"), Column("Value", ">{\\arraybackslash}p{8.5cm}")]
+    cw = dk.crack_width
+    rows = [
+        [r"Max. Permissible Crack Width", _fmt_qv_unit(cw.limit)],
+        [r"Calculated Crack Width, $w_k$ (governing)", _fmt_qv_unit(cw.calculated)],
+        [r"Crack Width Check", _fmt_status(cw.status)],
+    ]
+    return Table(caption="Crack Width Check (Deck Slab)", columns=cols, rows=rows)
+
+def _build_table_5_17f(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{5.5cm}"), Column("Formula", "C{3.5cm}"), Column("Value", ">{\\centering\\arraybackslash}p{4.5cm}"), Column("Status", "C{2cm}")]
+    sh = dk.shear
+    
+    ur_str = "---"
+    if sh.oneway_ur is not None:
+        ur_str = f"{sh.oneway_ur:.2f}"
+        
+    k_str = f"{sh.oneway_size_factor_k:.3f}" if sh.oneway_size_factor_k is not None else "---"
+    rho_str = f"{sh.oneway_rho_l:.4f}" if sh.oneway_rho_l is not None else "---"
+        
+    rows = [
+        [r"Design Shear per unit width, $V_{Ed$}", r"$\gamma_{DL} V_{DL} + \gamma_{LL}(1{+}IF)V_{LL}$", _fmt_qv_unit(sh.oneway_ved), "---"],
+        [r"Size factor, $k$", r"$1 + \sqrt{200/d} \leq 2.0$", k_str, "---"],
+        [r"Long.\ reinforcement ratio, $\rho_l$", r"$A_{sl}/(b_w\,d) \leq 0.02$", rho_str, "---"],
+        [r"Shear resistance (no stirrups), $V_{Rd,c$}", r"$v_{Rd,c}\,b_w\,d$ (Cl.\ 10.3.2)", _fmt_qv_unit(sh.oneway_vrdc), "---"],
+        [r"One-Way Shear Check", r"$V_{Ed} \leq V_{Rd,c}$", ur_str, _fmt_status(sh.oneway_status)],
+    ]
+    return Table(caption="One-Way (Beam) Shear Check (Deck Slab)", columns=cols, rows=rows)
+
+def _build_table_5_17g(dk: DeckDesignData) -> Table:
+    cols = [Column("Parameter", "L{5.5cm}"), Column("Required / Limit", ">{\\centering\\arraybackslash}p{4.1cm}"), Column("Provided", ">{\\centering\\arraybackslash}p{4.1cm}"), Column("Status", "C{1.8cm}")]
+    dt = dk.detailing
+    rows = [
+        [r"Main (Bottom Transverse)", _fmt_qv_unit(dt.required_bottom), _fmt_qv_unit(dt.provided_bottom), _fmt_status(dt.status_bottom)],
+        [r"Main (Top Transverse)", _fmt_qv_unit(dt.required_top), _fmt_qv_unit(dt.provided_top), _fmt_status(dt.status_top)],
+        [r"Distribution (Longitudinal)", _fmt_qv_unit(dt.required_dist), _fmt_qv_unit(dt.provided_dist), _fmt_status(dt.status_dist)],
+    ]
+    return Table(caption="Reinforcement Detailing Summary (Deck Slab)", columns=cols, rows=rows)
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -342,6 +512,50 @@ def build_chapter_5(facts: ReportFacts) -> Chapter:
             for tbl in tables:
                 components.append(tbl)
                 components.append(RawLatex(r"\vspace{1em}"))
+        
+        if gd.shear_connectors:
+            sc = gd.shear_connectors
+            components.append(_build_table_5_14(sc))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            from ..document import LayoutHints
+            
+            # Needspace hack before table 5.15
+            t515 = _build_table_5_15(sc)
+            components.append(t515)
+            components.append(RawLatex(r"\noindent\textit{Note: IRC 22 Cl. 606.4, 606.9. Governing spacing $= \min(S_{L1}, S_{L2}, S_R)$.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            t516 = _build_table_5_16(sc)
+            components.append(t516)
+            components.append(RawLatex(r"\noindent\textit{Note: IRC 22 Cl. 606.6, 606.10.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+        if gd.deck and gd.deck.is_designed:
+            dk = gd.deck
+            components.append(_build_table_5_17a(dk))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_17b(dk))
+            components.append(RawLatex(r"\vspace{1em}"))
+            components.append(_build_table_5_17c(dk))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            t17d = _build_table_5_17d(dk)
+            components.append(t17d)
+            components.append(RawLatex(r"\noindent\textit{Note: Punching shear reinforcement not typically required for deck slabs with $d \geq 200$ mm and adequate longitudinal reinforcement.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            components.append(_build_table_5_17e(dk))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            t17f = _build_table_5_17f(dk)
+            components.append(t17f)
+            components.append(RawLatex(r"\noindent\textit{Note: IRC 112 Cl. 10.3.2. Shear reinforcement not provided in deck slabs; capacity relies on concrete and main reinforcement.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            components.append(_build_table_5_17g(dk))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
     else:
         # Fallback: delegate to legacy ch5_design_checks
         from osdagbridge.core.reports.chap5 import ch5_design_checks

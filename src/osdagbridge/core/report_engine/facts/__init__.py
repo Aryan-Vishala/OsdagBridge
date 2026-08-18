@@ -406,6 +406,130 @@ class InputFacts:
 
 
 # ---------------------------------------------------------------------------
+# Shear Connector Data (Phase 5B.1)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ShearConnectorSpacing:
+    required: Optional[QuantityValue] = None
+    provided: Optional[QuantityValue] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+@dataclass(frozen=True)
+class ShearConnectorData:
+    """Tables 5.14-5.16"""
+    # 5.14 Capacity
+    design_resistance_qu: Optional[QuantityValue] = None
+    fatigue_resistance_qr: Optional[QuantityValue] = None
+    
+    # 5.15 Spacing
+    uls_shear: ShearConnectorSpacing = field(default_factory=ShearConnectorSpacing)
+    full_composite: ShearConnectorSpacing = field(default_factory=ShearConnectorSpacing)
+    sls_fatigue: ShearConnectorSpacing = field(default_factory=ShearConnectorSpacing)
+    max_limit: ShearConnectorSpacing = field(default_factory=ShearConnectorSpacing)
+    
+    # 5.16 Transverse Shear & Detailing
+    vl_longitudinal: Optional[QuantityValue] = None
+    vrd_capacity: Optional[QuantityValue] = None
+    transverse_ur: Optional[float] = None
+    transverse_status: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    min_transverse_reinf_req: Optional[QuantityValue] = None
+    min_transverse_reinf_prov: Optional[QuantityValue] = None
+    reinf_status: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    stud_diameter: Optional[QuantityValue] = None
+    stud_diameter_limit: Optional[QuantityValue] = None
+    diameter_status: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    edge_dist_prov: Optional[QuantityValue] = None
+    edge_dist_req: Optional[QuantityValue] = None
+    edge_dist_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# Deck Design Data (Phase 5B.2)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DeckLoadingGeometry:
+    effective_span: Optional[QuantityValue] = None
+    thickness: Optional[QuantityValue] = None
+    concrete_grade: Optional[str] = None
+    fck: Optional[QuantityValue] = None
+    reinf_grade: Optional[str] = None
+    fy: Optional[QuantityValue] = None
+    dead_load: Optional[QuantityValue] = None
+    wheel_load: Optional[QuantityValue] = None
+    tyre_width: Optional[QuantityValue] = None
+    impact_factor: Optional[float] = None
+    vehicle: Optional[str] = None
+
+@dataclass(frozen=True)
+class DeckFlexureCheck:
+    demand_sagging: Optional[QuantityValue] = None
+    capacity_sagging: Optional[QuantityValue] = None
+    status_sagging: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    demand_hogging: Optional[QuantityValue] = None
+    required_top_steel: Optional[QuantityValue] = None
+    capacity_hogging: Optional[QuantityValue] = None
+    status_hogging: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    has_overhang: bool = False
+    overhang_length: Optional[QuantityValue] = None
+    demand_overhang: Optional[QuantityValue] = None
+    capacity_overhang: Optional[QuantityValue] = None
+    status_overhang: CheckStatus = CheckStatus.UNAVAILABLE
+
+@dataclass(frozen=True)
+class DeckShearCheck:
+    punching_ved_kn: Optional[QuantityValue] = None
+    punching_ved_mpa: Optional[QuantityValue] = None
+    punching_vrdc_mpa: Optional[QuantityValue] = None
+    punching_ur: Optional[float] = None
+    punching_status: CheckStatus = CheckStatus.UNAVAILABLE
+    
+    oneway_ved: Optional[QuantityValue] = None
+    oneway_size_factor_k: Optional[float] = None
+    oneway_rho_l: Optional[float] = None
+    oneway_vrdc: Optional[QuantityValue] = None
+    oneway_ur: Optional[float] = None
+    oneway_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+@dataclass(frozen=True)
+class DeckCrackWidthCheck:
+    calculated: Optional[QuantityValue] = None
+    limit: Optional[QuantityValue] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+@dataclass(frozen=True)
+class DeckDetailingCheck:
+    required_bottom: Optional[QuantityValue] = None
+    provided_bottom: Optional[QuantityValue] = None
+    
+    required_top: Optional[QuantityValue] = None
+    provided_top: Optional[QuantityValue] = None
+    
+    required_dist: Optional[QuantityValue] = None
+    provided_dist: Optional[QuantityValue] = None
+    
+    status_bottom: CheckStatus = CheckStatus.UNAVAILABLE
+    status_top: CheckStatus = CheckStatus.UNAVAILABLE
+    status_dist: CheckStatus = CheckStatus.UNAVAILABLE
+
+@dataclass(frozen=True)
+class DeckDesignData:
+    """Tables 5.17a-g"""
+    is_designed: bool = False
+    loading: DeckLoadingGeometry = field(default_factory=DeckLoadingGeometry)
+    flexure: DeckFlexureCheck = field(default_factory=DeckFlexureCheck)
+    shear: DeckShearCheck = field(default_factory=DeckShearCheck)
+    crack_width: DeckCrackWidthCheck = field(default_factory=DeckCrackWidthCheck)
+    detailing: DeckDetailingCheck = field(default_factory=DeckDetailingCheck)
+
+
+# ---------------------------------------------------------------------------
 # Design check data (Chapter 5 — top-level container)
 # ---------------------------------------------------------------------------
 
@@ -417,3 +541,5 @@ class DesignCheckData:
     in Phases 5B (deck, shear connectors) and 5C (bracing, summary).
     """
     girders: tuple[GirderDesignData, ...] = ()
+    shear_connectors: Optional[ShearConnectorData] = None
+    deck: Optional[DeckDesignData] = None

@@ -28,6 +28,7 @@ from osdagbridge.core.report_engine.facts.design_checks import (
     _safe_float,
     _ur_status,
     build_girder_design_data,
+    build_design_check_data,
 )
 
 
@@ -212,13 +213,13 @@ class TestBuildGirderDesignData:
     def test_returns_design_check_data(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert isinstance(result, DesignCheckData)
 
     def test_single_girder(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert len(result.girders) == 1
         assert isinstance(result.girders[0], GirderDesignData)
         assert result.girders[0].girder_label == "G1"
@@ -226,7 +227,7 @@ class TestBuildGirderDesignData:
     def test_section_properties_values(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sp = result.girders[0].section_properties
         assert sp.depth.value == 1500
         assert sp.depth.unit == "mm"
@@ -240,7 +241,7 @@ class TestBuildGirderDesignData:
     def test_classification_values(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         cl = result.girders[0].classification
         assert cl.flange_slenderness == 7.0
         assert cl.class_flange == "1"
@@ -251,7 +252,7 @@ class TestBuildGirderDesignData:
     def test_flexure_check_ur_converted(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         fl = result.girders[0].flexure
         assert fl.mu_applied.value == 2500.0
         assert fl.mu_applied.unit == "kN-m"
@@ -262,7 +263,7 @@ class TestBuildGirderDesignData:
     def test_shear_check_ur_converted(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sh = result.girders[0].shear
         assert sh.vu.value == 450.0
         assert sh.vu.unit == "kN"
@@ -272,7 +273,7 @@ class TestBuildGirderDesignData:
     def test_interaction_check_three_bands(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         ix = result.girders[0].interaction
         assert ix.high_shear == "No"
         assert ix.mdv.value == 3100.0
@@ -284,7 +285,7 @@ class TestBuildGirderDesignData:
     def test_ltb_check_three_bands(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         lt = result.girders[0].ltb
         assert lt.mcr.value == 5600.0
         assert lt.ltb_lambda == 0.76
@@ -295,7 +296,7 @@ class TestBuildGirderDesignData:
     def test_stiffener_summary_values(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         st = result.girders[0].stiffener_summary
         assert st.method == "Yield"
         assert st.int_thick.value == 12.0
@@ -306,7 +307,7 @@ class TestBuildGirderDesignData:
     def test_bearing_stiffener_checks(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         bs = result.girders[0].bearing_stiffener
         assert bs.wb_req.value == 800.0
         assert bs.wb_prov.value == 950.0
@@ -318,7 +319,7 @@ class TestBuildGirderDesignData:
     def test_deflection_check_computed(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         df = result.girders[0].deflection
         assert df.allow_live.value == 30000.0 / 800.0
         assert df.allow_total.value == 30000.0 / 600.0
@@ -326,7 +327,7 @@ class TestBuildGirderDesignData:
     def test_stress_check_from_nested_dict(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         st = result.girders[0].stress
         assert st.actual_stress.value == 210.5
         assert st.allowable_stress.value == 256.5
@@ -335,7 +336,7 @@ class TestBuildGirderDesignData:
     def test_fatigue_check_from_nested_dict(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         fa = result.girders[0].fatigue
         assert fa.stress_range.value == 80.2
         assert fa.fatigue_limit.value == 125.0
@@ -345,7 +346,7 @@ class TestBuildGirderDesignData:
     def test_summary_highest_dcr(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sm = result.girders[0].summary
         assert sm.controlling_check == "Flexure"
         assert abs(sm.dcr - 0.78) < 0.01
@@ -356,7 +357,7 @@ class TestBuildGirderDesignData:
         """The controlling LC should be a real LC, not the Envelope."""
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sm = result.girders[0].summary
         assert "Envelope" not in sm.governing_lc
 
@@ -394,7 +395,7 @@ class TestMultipleGirders:
         id = _base_input_dict()
         id["typical_section.no_of_girders"] = 2
 
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert len(result.girders) == 2
         assert result.girders[0].girder_label == "G1"
         assert result.girders[1].girder_label == "G2"
@@ -411,7 +412,7 @@ class TestConditionalIntermediateStiffener:
         od = _base_output_dict()
         id = _base_input_dict()
         id["geometry.design_mode"] = "Optimized"
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert result.girders[0].intermediate_stiffener is None
 
     def test_custom_mode_with_intermediate_stiffener(self):
@@ -422,7 +423,7 @@ class TestConditionalIntermediateStiffener:
         od["steeldesign.details.int_stiffener.fqd"] = 150.0
         id = _base_input_dict()
         id["geometry.design_mode"] = "Custom"
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         ist = result.girders[0].intermediate_stiffener
         assert ist is not None
         assert ist.iys_prov.value == 650000.0
@@ -436,7 +437,7 @@ class TestConditionalIntermediateStiffener:
 
 class TestMissingValues:
     def test_empty_output_dict(self):
-        result = build_girder_design_data({}, _base_input_dict())
+        result = build_design_check_data({}, _base_input_dict())
         assert len(result.girders) == 1
         g = result.girders[0]
         assert g.section_properties.depth is None
@@ -446,14 +447,14 @@ class TestMissingValues:
     def test_zero_ur_is_valid(self):
         od = _base_output_dict(**{"util.flexure": 0.0})
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert result.girders[0].flexure.utilization_ratio == 0.0
         assert result.girders[0].flexure.status == CheckStatus.PASS
 
     def test_none_ur_is_unavailable(self):
         od = _base_output_dict(**{"util.flexure": None})
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert result.girders[0].flexure.utilization_ratio is None
         assert result.girders[0].flexure.status == CheckStatus.UNAVAILABLE
 
@@ -466,13 +467,13 @@ class TestInteractionBands:
     def test_warn_band_for_interaction(self):
         od = _base_output_dict(**{"util.interaction": 95.0})  # 0.95 ratio
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert result.girders[0].interaction.mv_status == CheckStatus.WARN
 
     def test_fail_band_for_ltb(self):
         od = _base_output_dict(**{"util.ltb": 105.0})  # 1.05 ratio
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         assert result.girders[0].ltb.status == CheckStatus.FAIL
 
 
@@ -486,7 +487,7 @@ class TestBearingStiffenerEdgeCases:
             "steeldesign.details.bearing_stiffener.fcdw_wb": 0.0,
         })
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         bs = result.girders[0].bearing_stiffener
         assert bs.wb_status == CheckStatus.UNAVAILABLE
 
@@ -495,7 +496,7 @@ class TestBearingStiffenerEdgeCases:
             "steeldesign.details.bearing_stiffener.reaction": None,
         })
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         bs = result.girders[0].bearing_stiffener
         assert bs.wb_status == CheckStatus.UNAVAILABLE
 
@@ -509,7 +510,7 @@ class TestSummaryEdgeCases:
         od = _base_output_dict()
         od["design_results"]["per_girder"]["G1"]["checks"] = []
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sm = result.girders[0].summary
         assert sm.status == CheckStatus.UNAVAILABLE
 
@@ -517,7 +518,7 @@ class TestSummaryEdgeCases:
         od = _base_output_dict()
         od["design_results"]["per_girder"]["G1"]["per_lc"] = {}
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         sm = result.girders[0].summary
         assert sm.governing_lc == ""
 
@@ -530,13 +531,13 @@ class TestFrozenDesignData:
     def test_girder_design_data_frozen(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         with pytest.raises(AttributeError):
             result.girders[0].girder_label = "Changed"
 
     def test_design_check_data_frozen(self):
         od = _base_output_dict()
         id = _base_input_dict()
-        result = build_girder_design_data(od, id)
+        result = build_design_check_data(od, id)
         with pytest.raises(AttributeError):
             result.girders = ()
