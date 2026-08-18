@@ -615,3 +615,32 @@ class OverallSummaryData:
     cross_bracing: Optional[ComponentSummary]
     end_diaphragm: Optional[ComponentSummary]
 
+# ---------------------------------------------------------------------------
+# Material Take-off Data (Chapter 7)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class TakeoffItem:
+    item_description: str
+    unit_volume: Optional[QuantityValue]
+    quantity: Optional[int]
+    total_volume: Optional[QuantityValue]
+    unit_weight: Optional[QuantityValue]
+    total_weight: Optional[QuantityValue]
+    formula_components: Optional[tuple[QuantityValue, ...]] = None
+
+@dataclass(frozen=True)
+class StructuralSteelTakeoff:
+    girders: Optional[TakeoffItem]
+    cross_bracing_top: Optional[TakeoffItem]
+    cross_bracing_bot: Optional[TakeoffItem]
+    cross_bracing_diag: Optional[TakeoffItem]
+    end_diaphragms: Optional[TakeoffItem]
+
+@dataclass(frozen=True)
+class MaterialFacts:
+    structural_steel: StructuralSteelTakeoff
+    concrete_volume: Optional[TakeoffItem]
+    reinforcement_steel: Optional[TakeoffItem]
+    shear_studs: Optional[TakeoffItem]
+    crash_barrier: Optional[TakeoffItem]
