@@ -5,7 +5,7 @@ Builds semantic Table components from GirderDesignData for Tables 5.1–5.13.
 
 from __future__ import annotations
 
-from ..document import Chapter, Column, RawLatex, Section, Table, TableGroup
+from ..document import Chapter, Column, RawLatex, Section, Table, TableGroup, Chart
 from ..facts import (
     CheckStatus,
     DesignCheckData,
@@ -724,6 +724,22 @@ def build_chapter_5(facts: ReportFacts) -> Chapter:
             components.append(RawLatex(r"\vspace{4.0mm}"))
             if summary.end_diaphragm and summary.end_diaphragm.status == CheckStatus.UNAVAILABLE:
                 components.append(RawLatex(r"\noindent\textit{Note: End Diaphragm rolled/welded section design to be added.}"))
+            components.append(RawLatex(r"\vspace{1em}"))
+            
+            # UR Chart
+            ur_chart = Chart(
+                title="Overall Utilization Ratio by Component",
+                chart_type="bar",
+                data={
+                    "Steel Plate Girders": summary.girders.max_ur,
+                    "Concrete Deck Slab": summary.deck.max_ur,
+                    "Cross Bracing": summary.cross_bracing.max_ur if summary.cross_bracing else None,
+                    "End Diaphragms": summary.end_diaphragm.max_ur if summary.end_diaphragm else None,
+                },
+                y_label="Utilization Ratio (Demand / Capacity)",
+                threshold_line=1.0,
+            )
+            components.append(ur_chart)
             components.append(RawLatex(r"\vspace{1em}"))
     else:
         # Fallback: delegate to legacy ch5_design_checks

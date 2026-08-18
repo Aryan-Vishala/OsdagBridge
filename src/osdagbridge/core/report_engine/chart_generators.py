@@ -48,16 +48,36 @@ def generate_chart(
         figsize=(theme.chart.width_cm / 2.54, theme.chart.height_cm / 2.54),
     )
 
+    import numpy as np
+
     if chart.chart_type == "bar":
-        ax.bar(chart.data.keys(), chart.data.values(), color="steelblue")
+        # Convert None to np.nan for plotting so matplotlib skips it
+        vals = [v if v is not None else np.nan for v in chart.data.values()]
+        bars = ax.bar(chart.data.keys(), vals, color=theme.colors.primary)
+        
+        # Annotate missing values with "N/A"
+        for idx, (bar, original_val) in enumerate(zip(bars, chart.data.values())):
+            if original_val is None:
+                ax.text(
+                    idx,
+                    0.05,  # Slightly above bottom axis
+                    "N/A",
+                    ha='center',
+                    va='bottom',
+                    rotation=90,
+                    color='gray',
+                    fontsize=theme.chart.title_font_size * 0.8
+                )
+
     elif chart.chart_type == "grouped_bar":
         # Grouped bar — for now, single-series fallback.
-        ax.bar(chart.data.keys(), chart.data.values(), color="steelblue")
+        vals = [v if v is not None else np.nan for v in chart.data.values()]
+        bars = ax.bar(chart.data.keys(), vals, color=theme.colors.primary)
 
     if chart.threshold_line is not None:
         ax.axhline(
             y=chart.threshold_line,
-            color="r",
+            color=theme.colors.error,
             linestyle="--",
             linewidth=2,
             label=f"Threshold={chart.threshold_line}",
@@ -70,7 +90,12 @@ def generate_chart(
     if chart.y_label:
         ax.set_ylabel(chart.y_label)
 
-    plt.tight_layout()
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+    try:
+        plt.tight_layout()
+    except Exception:
+        pass
     fig.savefig(path, dpi=theme.chart.dpi)
     plt.close(fig)
 
