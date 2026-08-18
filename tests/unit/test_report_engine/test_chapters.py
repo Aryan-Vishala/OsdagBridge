@@ -5,11 +5,27 @@ from unittest.mock import patch
 import pytest
 
 from osdagbridge.core.report_engine.facts import (
+    CheckStatus,
+    DesignCheckData,
     FactMetadata,
+    GirderClassification,
+    GirderDeflectionCheck,
+    GirderDesignData,
+    GirderDesignSummary,
+    GirderFatigueCheck,
+    GirderFlexureCheck,
+    GirderInteractionCheck,
+    GirderLTBCheck,
+    GirderSectionProperties,
+    GirderShearCheck,
+    GirderBearingStiffenerCheck,
+    GirderStiffenerSummary,
+    GirderStressCheck,
     InputFacts,
+    QuantityValue,
     ReportFacts,
 )
-from osdagbridge.core.report_engine.document import Chapter, RawLatex, Section
+from osdagbridge.core.report_engine.document import Chapter, Column, RawLatex, Section, Table, TableGroup
 
 
 # ---------------------------------------------------------------------------

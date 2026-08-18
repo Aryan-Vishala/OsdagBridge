@@ -20,8 +20,9 @@ from .document import (
     ReportDocument,
     Section,
     Table,
+    TableGroup,
 )
-from .facts import QuantityValue
+from .facts import CheckStatus, QuantityValue
 from .theme import ReportTheme
 
 
@@ -66,6 +67,16 @@ class LatexRenderer:
         if v is None:
             return fallback
         return str(v)
+
+    def fmt_status(self, status: CheckStatus) -> str:
+        """Format a CheckStatus for LaTeX output."""
+        _map = {
+            CheckStatus.PASS: "PASS",
+            CheckStatus.WARN: r"\textcolor{orange}{WARN}",
+            CheckStatus.FAIL: r"\textcolor{red}{FAIL}",
+            CheckStatus.UNAVAILABLE: "---",
+        }
+        return _map.get(status, "---")
 
     # ------------------------------------------------------------------
     # Document tree
@@ -121,7 +132,7 @@ class LatexRenderer:
         # Build header row from columns
         header = self._build_header_row(table)
 
-        # Build body from semantic rows
+        # Build body from semantic rows or groups
         body = self._build_body(table)
 
         pre = r"\hline" if hints.keep_caption_with_table else ""
@@ -151,7 +162,7 @@ class LatexRenderer:
             specs = []
             for col in table.columns:
                 if col.width:
-                    specs.append(f"L{{{col.width}}}")
+                    specs.append(col.width)
                 else:
                     specs.append("l")
             return "|" + "|".join(specs) + "|"
@@ -163,11 +174,44 @@ class LatexRenderer:
         return " & ".join(cells)
 
     def _build_body(self, table: Table) -> str:
-        """Build the table body LaTeX from Table.rows."""
+        """Build the table body LaTeX from Table.rows or Table.groups."""
+        if table.groups:
+            return self._build_grouped_body(table)
         lines = []
-        for row in table.rows:
+        for row in (table.rows or []):
             cells = [self._escape(cell) for cell in row]
             lines.append(" & ".join(cells) + r" \\")
+        return "\n".join(lines)
+
+    def _build_grouped_body(self, table: Table) -> str:
+        """Build body with \\multirow for TableGroup labels.
+
+        For each group, the group label spans all rows in the first column.
+        Subsequent rows have an empty first cell (the \\multirow covers them).
+        """
+        if not table.groups:
+            return ""
+        lines = []
+        for group_idx, group in enumerate(table.groups):
+            n_rows = len(group.rows)
+            label_esc = self._escape(group.label)
+            for row_idx, row in enumerate(group.rows):
+                cells = [self._escape(cell) for cell in row]
+                if row_idx == 0 and n_rows > 1:
+                    first_cell = (
+                        r"\multirow{" + str(n_rows) + r"}{*}{\makecell{"
+                        + label_esc + r"}}"
+                    )
+                elif row_idx == 0:
+                    first_cell = label_esc
+                else:
+                    first_cell = ""
+                
+                cells.insert(0, first_cell)
+                lines.append(" & ".join(cells) + r" \\[6pt]")
+                if row_idx < n_rows - 1:
+                    lines.append(r"\cline{2-" + str(len(table.columns)) + "}")
+            lines.append(r"\hline")
         return "\n".join(lines)
 
     def _escape(self, text: str) -> str:

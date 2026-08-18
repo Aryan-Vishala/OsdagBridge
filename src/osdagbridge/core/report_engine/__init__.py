@@ -6,9 +6,25 @@ Architecture::
 """
 
 from .facts import (
+    CheckStatus,
     DeadLoadFact,
+    DesignCheckData,
     FactMetadata,
     FootwayLoadFact,
+    GirderClassification,
+    GirderDeflectionCheck,
+    GirderDesignData,
+    GirderDesignSummary,
+    GirderFatigueCheck,
+    GirderFlexureCheck,
+    GirderInteractionCheck,
+    GirderLTBCheck,
+    GirderSectionProperties,
+    GirderShearCheck,
+    GirderStiffenerSummary,
+    GirderStressCheck,
+    GirderBearingStiffenerCheck,
+    GirderIntermediateStiffenerCheck,
     InputFacts,
     LiveLoadFact,
     LoadCombinationFact,
@@ -35,7 +51,9 @@ from .document import (
     ReportDocument,
     Section,
     Table,
+    TableGroup,
 )
+from .facts.design_checks import build_girder_design_data
 from .layout import LayoutHints
 from .theme import (
     ChartStyle,
@@ -75,6 +93,7 @@ __all__ = [
     "Section",
     "Column",
     "Table",
+    "TableGroup",
     "Chart",
     "Figure",
     "Callout",

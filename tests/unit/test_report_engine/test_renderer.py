@@ -9,8 +9,9 @@ from osdagbridge.core.report_engine.document import (
     ReportDocument,
     Section,
     Table,
+    TableGroup,
 )
-from osdagbridge.core.report_engine.facts import QuantityValue
+from osdagbridge.core.report_engine.facts import CheckStatus, QuantityValue
 from osdagbridge.core.report_engine.layout import LayoutHints
 from osdagbridge.core.report_engine.renderer import LatexRenderer
 from osdagbridge.core.report_engine.theme import ReportTheme
@@ -173,6 +174,156 @@ class TestRenderTable:
         tex = self.renderer._render_table(t)
         assert r"|L{5cm}|" in tex
         assert "l" in tex
+
+
+class TestRenderTableGroup:
+    def setup_method(self):
+        self.renderer = LatexRenderer(ReportTheme())
+
+    def test_single_row_group(self):
+        """Single-row group: label displayed directly (no multirow needed)."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["Depth", "1500"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert "G1" in tex
+        assert "Depth" in tex
+        assert "1500" in tex
+
+    def test_multirow_for_multi_row_group(self):
+        """Multi-row group: \\multirow spans all rows in the group."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[
+                    ["Depth", "1500"],
+                    ["Width", "400"],
+                    ["Thickness", "25"],
+                ]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\multirow{3}" in tex
+        assert "G1" in tex
+        assert "Depth" in tex
+        assert "Width" in tex
+        assert "Thickness" in tex
+
+    def test_multiple_girder_groups(self):
+        """Multiple groups: each gets its own \\multirow block."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["Depth", "1500"], ["Width", "400"]]),
+                TableGroup(label="G2", rows=[["Depth", "1600"], ["Width", "420"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\multirow{2}" in tex
+        assert tex.count(r"\multirow{2}") == 2
+        assert "G1" in tex
+        assert "G2" in tex
+        assert "1500" in tex
+        assert "1600" in tex
+
+    def test_cline_between_rows(self):
+        """\\cline separates rows within a group (skipping first column)."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["A", "1"], ["B", "2"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\cline{2-3}" in tex
+
+    def test_hline_between_groups(self):
+        """\\hline separates groups."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["A", "1"]]),
+                TableGroup(label="G2", rows=[["B", "2"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert tex.count(r"\hline") >= 3  # header + between groups + footer
+
+    def test_repeated_header_after_page_break(self):
+        """Grouped tables include \\endhead for page-break headers."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["A", "1"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\endfirsthead" in tex
+        assert r"\endhead" in tex
+
+    def test_no_groups_falls_back_to_flat_rows(self):
+        """Table with groups=None uses flat rows."""
+        t = Table(
+            caption="Flat",
+            columns=[Column("A"), Column("B")],
+            rows=[["1", "2"]],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\multirow" not in tex
+        assert "1 & 2" in tex
+
+    def test_empty_groups(self):
+        """Empty groups list produces no body rows."""
+        t = Table(
+            caption="Empty",
+            columns=[Column(""), Column("X")],
+            groups=[],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\begin{longtable}" in tex
+        assert r"\end{longtable}" in tex
+
+    def test_special_chars_escaped_in_groups(self):
+        """LaTeX special characters in group rows are escaped."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("X")],
+            groups=[
+                TableGroup(label="G1", rows=[["A & B", "C%D"]]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"A \& B" in tex
+        assert r"C\%D" in tex
+
+    def test_fmt_status_pass(self):
+        """fmt_status returns PASS for CheckStatus.PASS."""
+        assert self.renderer.fmt_status(CheckStatus.PASS) == "PASS"
+
+    def test_fmt_status_fail(self):
+        """fmt_status wraps FAIL in \\textcolor{red}."""
+        result = self.renderer.fmt_status(CheckStatus.FAIL)
+        assert r"\textcolor{red}" in result
+        assert "FAIL" in result
+
+    def test_fmt_status_warn(self):
+        """fmt_status wraps WARN in \\textcolor{orange}."""
+        result = self.renderer.fmt_status(CheckStatus.WARN)
+        assert r"\textcolor{orange}" in result
+        assert "WARN" in result
+
+    def test_fmt_status_unavailable(self):
+        """fmt_status returns --- for UNAVAILABLE."""
+        assert self.renderer.fmt_status(CheckStatus.UNAVAILABLE) == "---"
 
 
 class TestRenderFigure:

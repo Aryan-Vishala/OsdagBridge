@@ -1,44 +1,369 @@
-# =============================================================================
-# Chapter 5: Design Checks — document builder.
-#
-# Phase D: Wraps the legacy ch5_design_checks() via RawLatex.
-# Future: Migrate individual tables to structured Table components.
-# =============================================================================
+"""Chapter 5: Design Checks — document builder (Phase 5A).
 
-from ..document import Chapter, RawLatex, Section
-from ..facts import ReportFacts
+Builds semantic Table components from GirderDesignData for Tables 5.1–5.13.
+"""
+
+from __future__ import annotations
+
+from ..document import Chapter, Column, RawLatex, Section, Table, TableGroup
+from ..facts import (
+    CheckStatus,
+    DesignCheckData,
+    GirderDesignData,
+    QuantityValue,
+    ReportFacts,
+)
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def _fmt_qv(qv: QuantityValue | None, fallback: str = "---") -> str:
+    """Format a QuantityValue for table display."""
+    if qv is None:
+        return fallback
+    return f"{qv.value:g}"
+
+
+def _fmt_status(status: CheckStatus) -> str:
+    """Format CheckStatus for LaTeX display."""
+    _map = {
+        CheckStatus.PASS: "PASS",
+        CheckStatus.WARN: "WARN",
+        CheckStatus.FAIL: r"\textcolor{red}{FAIL}",
+        CheckStatus.UNAVAILABLE: "---",
+    }
+    return _map.get(status, "---")
+
+
+def _fmt_ratio(ur: float | None, nd: int = 2) -> str:
+    """Format a ratio to nd decimal places."""
+    if ur is None:
+        return "---"
+    return f"{ur:.{nd}f}"
+
+
+def _fmt_qv_unit(qv: QuantityValue | None, fallback: str = "---") -> str:
+    """Format QuantityValue with trailing unit."""
+    if qv is None:
+        return fallback
+    return f"{qv.value:g} {qv.unit}" if qv.unit else f"{qv.value:g}"
+
+
+# ---------------------------------------------------------------------------
+# Table builders
+# ---------------------------------------------------------------------------
+
+COLS_3_PARAM = [Column(""), Column("Parameter", "L{8.0cm}"), Column("Value", ">{\\centering\\arraybackslash}p{5.0cm}")]
+COLS_5_CHECK = [Column(""), Column("Parameter", "C{3.5cm}"), Column("Reference", "C{3.5cm}"), Column("Value", ">{\\centering\\arraybackslash}p{4.2cm}"), Column("Status", "C{1.8cm}")]
+COLS_5_REQ   = [Column(""), Column("Check", "L{3.5cm}"), Column("Required", "C{3.5cm}"), Column("Provided", ">{\\centering\\arraybackslash}p{4.2cm}"), Column("Status", "C{1.8cm}")]
+COLS_5_DEF   = [Column(""), Column("Check", "L{3.5cm}"), Column("Allowable", "C{3.5cm}"), Column("Actual", ">{\\centering\\arraybackslash}p{3.5cm}"), Column("Status", "C{2.5cm}")]
+
+
+def _build_table_5_1(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.1 — Girder Section Properties."""
+    groups = []
+    for g in girders:
+        sp = g.section_properties
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Depth, D (mm)", _fmt_qv(sp.depth)],
+            ["Top Flange Width, b\\textsubscript{f} (mm)", _fmt_qv(sp.top_flange_width)],
+            ["Bottom Flange Width, b\\textsubscript{f} (mm)", _fmt_qv(sp.bottom_flange_width)],
+            ["Top Flange Thickness, t\\textsubscript{f} (mm)", _fmt_qv(sp.top_flange_thickness)],
+            ["Bottom Flange Thickness, t\\textsubscript{f} (mm)", _fmt_qv(sp.bottom_flange_thickness)],
+            ["Web Thickness, t\\textsubscript{w} (mm)", _fmt_qv(sp.web_thickness)],
+            ["Gross Area, A (cm\\textsuperscript{2})", _fmt_qv(sp.gross_area)],
+            ["Moment of Inertia, I\\textsubscript{z} (cm\\textsuperscript{4})", _fmt_qv(sp.moment_of_inertia)],
+            ["Elastic Section Modulus, Z\\textsubscript{ez} (cm\\textsuperscript{3})", _fmt_qv(sp.elastic_section_modulus)],
+            ["Plastic Section Modulus, Z\\textsubscript{pz} (cm\\textsuperscript{3})", _fmt_qv(sp.plastic_section_modulus)],
+            ["Effective Slab Width, b\\textsubscript{eff} (mm)", _fmt_qv(sp.effective_slab_width)],
+            ["Transformed Composite I\\textsubscript{z} (cm\\textsuperscript{4})", _fmt_qv(sp.composite_iz)],
+            ["Depth to Plastic Neutral Axis (mm)", _fmt_qv(sp.pna_depth)],
+        ]))
+    return Table(
+        caption="Girder Section Properties (Final Optimized / User-selected)",
+        columns=COLS_3_PARAM,
+        groups=groups,
+    )
+
+
+def _build_table_5_2(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.2 — Girder Section Classification."""
+    cols = [
+        Column(""), Column("Element", "L{3cm}"),
+        Column("Slenderness Ratio", "C{3.5cm}"),
+        Column("Class Limit", "C{2.5cm}"),
+        Column("Classification", ">{\\centering\\arraybackslash}p{4.0cm}"),
+    ]
+    groups = []
+    for g in girders:
+        c = g.classification
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Top Flange", _fmt_ratio(c.flange_slenderness), _fmt_ratio(c.flange_class_limit), c.class_flange or "---"],
+            ["Web", _fmt_ratio(c.web_slenderness), _fmt_ratio(c.web_class_limit), c.class_web or "---"],
+            ["Overall Section", "---", "---", c.section_class or "---"],
+        ]))
+    return Table(caption="Girder Section Classification", columns=cols, groups=groups)
+
+
+def _build_table_5_3(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.3 — Moment Capacity Check."""
+    groups = []
+    for g in girders:
+        fl = g.flexure
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Applied Moment, $M_u$", "Governing LC (ULS)", _fmt_qv_unit(fl.mu_applied), "---"],
+            ["Design Moment Capacity, $M_d$", "IRC 22 Cl. 603.3.1", _fmt_qv_unit(fl.md_capacity), "---"],
+            ["Utilization Ratio, $M_u / M_d$", "$M_u / M_d$", _fmt_ratio(fl.utilization_ratio), _fmt_status(fl.status)],
+        ]))
+    return Table(caption="Moment Capacity Check", columns=COLS_5_CHECK, groups=groups)
+
+
+def _build_table_5_4(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.4 — Shear Capacity Check."""
+    groups = []
+    for g in girders:
+        sh = g.shear
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Applied Shear, $V_u$", "Governing LC (ULS)", _fmt_qv_unit(sh.vu), "---"],
+            ["Shear Area, $A_v$", "$d_w \\times t_w$", _fmt_qv_unit(sh.shear_av), "---"],
+            ["Panel Aspect Ratio, c/d", "---", _fmt_ratio(sh.panel_cd), "---"],
+            ["Shear Buckling Coeff, $k_v$", "IS 800 Cl. 8.4.2.2", _fmt_ratio(sh.shear_kv), "---"],
+            ["Web Slenderness, $\\lambda_w$", "$\\sqrt{f_{yw}/(\\sqrt{3}\\,\\tau_{cr})}$", _fmt_ratio(sh.shear_lambda_w), "---"],
+            ["Design Shear Stress, $\\tau_b$", "IRC 22 Cl. 603.3.3.2", _fmt_qv_unit(sh.shear_tau_b), "---"],
+            ["Shear Buckling Resistance, $V_{cr}$", "$A_v \\times \\tau_b$", _fmt_qv_unit(sh.shear_vcr), "---"],
+            ["Utilization Ratio, $V_u / V_d$", "$V_u / V_d$", _fmt_ratio(sh.utilization_ratio), _fmt_status(sh.status)],
+        ]))
+    return Table(caption="Shear Capacity Check", columns=COLS_5_CHECK, groups=groups)
+
+
+def _build_table_5_5(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.5 — Interaction Checks (M-V and M-N)."""
+    cols = [
+        Column(""), Column("Check", "C{3.5cm}"),
+        Column("Condition", "C{3.5cm}"),
+        Column("Value", ">{\\centering\\arraybackslash}p{4.2cm}"),
+        Column("Status", "C{1.8cm}"),
+    ]
+    groups = []
+    for g in girders:
+        ix = g.interaction
+        # M-N condition string
+        if ix.mn_ratio is not None and ix.mn_axial is not None and ix.mn_moment is not None:
+            mn_cond = f"{ix.mn_axial:.2f} + {ix.mn_moment:.2f} = {ix.mn_ratio:.3f}"
+            mn_val = f"{ix.mn_ratio:.3f}"
+        else:
+            mn_cond = "N/A"
+            mn_val = "N/A"
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["High Shear Condition?", "$V_u > 0.6\\,V_d$", ix.high_shear or "---", "---"],
+            ["Reduced Moment Capacity, $M_{dv}$", "IRC 22 Cl. 603.3.3.3", _fmt_qv_unit(ix.mdv), "---"],
+            ["Interaction Check: $M_u \\leq M_{dv}$", "---", _fmt_ratio(ix.mv_ur), _fmt_status(ix.mv_status)],
+            ["Interaction Check: $N_u/N_{Rd} + M_u/M_{dv} \\leq 1.0$", mn_cond, mn_val, _fmt_status(ix.mn_status)],
+        ]))
+    return Table(caption="Interaction Checks (M-V and M-N)", columns=cols, groups=groups)
+
+
+def _build_table_5_6(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.6 — Lateral Torsional Buckling Check."""
+    groups = []
+    for g in girders:
+        lt = g.ltb
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Elastic Critical Moment, $M_{cr}$", "IRC 22 Cl. 603.3.3.1", _fmt_qv_unit(lt.mcr), "---"],
+            ["Non-dim. Slenderness, $\\bar{\\lambda}_{LT}$", "$\\sqrt{M_p / M_{cr}}$", _fmt_ratio(lt.ltb_lambda), "---"],
+            ["LTB Reduction Factor, $\\chi_{LT}$", "IS 800 Cl. 8.2.2", _fmt_ratio(lt.ltb_chi), "---"],
+            ["LTB Resistance, $M_b$", "$\\chi_{LT}\\,M_p / \\gamma_{m0}$", _fmt_qv_unit(lt.ltb_mb), "---"],
+            ["$M_u \\leq M_b$", "$M_u / M_b$", _fmt_ratio(lt.utilization_ratio), _fmt_status(lt.status)],
+        ]))
+    return Table(caption="Lateral Torsional Buckling Check -- Construction Stage", columns=COLS_5_CHECK, groups=groups)
+
+
+def _build_table_5_7(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.7 — Stiffener Design Summary."""
+    cols = [Column(""), Column("Parameter", "L{6.5cm}"), Column("Value", ">{\\arraybackslash}p{6.5cm}")]
+    groups = []
+    for g in girders:
+        st = g.stiffener_summary
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Shear Buckling Design Method", st.method or "---"],
+            ["Intermediate Stiffener Thickness (mm)", _fmt_qv(st.int_thick)],
+            ["Intermediate Stiffener Spacing (mm)", _fmt_qv(st.int_spacing)],
+            ["End Panel Stiffener Thickness (mm)", _fmt_qv(st.end_thick)],
+            ["No. of End Panel Stiffeners", str(st.end_count) if st.end_count is not None else "---"],
+            ["Longitudinal Stiffeners", st.long_stiff or "---"],
+        ]))
+    return Table(caption="Stiffener Design Summary", columns=cols, groups=groups)
+
+
+def _build_table_5_8(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.8 — Intermediate Stiffener Checks (Custom mode only)."""
+    groups = []
+    for g in girders:
+        if g.intermediate_stiffener is None:
+            continue
+        ist = g.intermediate_stiffener
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Min. Moment of Inertia, $I_s$", _fmt_qv_unit(ist.iys_min), _fmt_qv_unit(ist.iys_prov), _fmt_status(ist.iys_status)],
+            ["Buckling Resistance, $F_{qd} \\geq F_q$", _fmt_qv_unit(ist.fq), _fmt_qv_unit(ist.fqd), _fmt_status(ist.fqd_status)],
+        ]))
+    return Table(caption="Intermediate Stiffener Checks", columns=COLS_5_REQ, groups=groups)
+
+
+def _build_table_5_9(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.9 — End Panel Stiffener Checks."""
+    groups = []
+    for g in girders:
+        bs = g.bearing_stiffener
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Web Buckling Resistance", _fmt_qv_unit(bs.wb_req), _fmt_qv_unit(bs.wb_prov), _fmt_status(bs.wb_status)],
+            ["Local Crushing Resistance", _fmt_qv_unit(bs.lc_req), _fmt_qv_unit(bs.lc_prov), _fmt_status(bs.lc_status)],
+            ["Bearing Capacity", _fmt_qv_unit(bs.ps_req), _fmt_qv_unit(bs.ps_prov), _fmt_status(bs.ps_status)],
+            ["Column Buckling Resistance", _fmt_qv_unit(bs.cb_req), _fmt_qv_unit(bs.cb_prov), _fmt_status(bs.cb_status)],
+        ]))
+    return Table(caption="End Panel Stiffener Checks", columns=COLS_5_REQ, groups=groups)
+
+
+def _build_table_5_10(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.10 — Serviceability: Deflection Checks."""
+    groups = []
+    for g in girders:
+        df = g.deflection
+        allow_live = _fmt_qv_unit(df.allow_live) if df.allow_live else "---"
+        allow_total = _fmt_qv_unit(df.allow_total) if df.allow_total else "---"
+        groups.append(TableGroup(label=g.girder_label, rows=[
+            ["Live Load Deflection, $\\delta_{LL}$ (mm)", f"L/800 = {allow_live}", _fmt_qv(df.actual_live), _fmt_status(df.live_status)],
+            ["Total Load Deflection, $\\delta_{total}$ (mm)", f"L/600 = {allow_total}", _fmt_qv(df.actual_total), _fmt_status(df.total_status)],
+        ]))
+    return Table(caption="Serviceability -- Deflection Checks", columns=COLS_5_DEF, groups=groups)
+
+
+def _build_table_5_11(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.11 — Serviceability: Maximum Stress Limitation (flat, no groups)."""
+    cols = [
+        Column(""), Column("Element", "L{3.5cm}"),
+        Column("Allowable Stress", "C{3.5cm}"),
+        Column("Actual Stress", ">{\\centering\\arraybackslash}p{3.5cm}"),
+        Column("Status", "C{2.5cm}"),
+    ]
+    rows = []
+    for g in girders:
+        st = g.stress
+        rows.append([
+            g.girder_label,
+            "Structural Steel ($0.9\\,f_y$)",
+            _fmt_qv_unit(st.allowable_stress),
+            _fmt_qv_unit(st.actual_stress),
+            _fmt_status(st.status),
+        ])
+    return Table(caption="Serviceability -- Maximum Stress Limitation", columns=cols, rows=rows)
+
+
+def _build_table_5_12(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.12 — Serviceability: Fatigue Assessment (flat, no groups)."""
+    cols = [
+        Column(""), Column("Stress Range, $\\Delta\\sigma$ (MPa)", "C{3.5cm}"),
+        Column("Fatigue Limit, $f_{fd}$ (MPa)", "C{3.5cm}"),
+        Column("Utilization Ratio", ">{\\centering\\arraybackslash}p{3.5cm}"),
+        Column("Status", "C{2.5cm}"),
+    ]
+    rows = []
+    for g in girders:
+        fa = g.fatigue
+        rows.append([
+            g.girder_label,
+            _fmt_qv_unit(fa.stress_range),
+            _fmt_qv_unit(fa.fatigue_limit),
+            _fmt_ratio(fa.utilization_ratio),
+            _fmt_status(fa.status),
+        ])
+    return Table(caption="Serviceability -- Fatigue Assessment", columns=cols, rows=rows)
+
+
+def _build_table_5_13(girders: tuple[GirderDesignData, ...]) -> Table:
+    """Table 5.13 — Girder Design Summary (flat, no groups)."""
+    cols = [
+        Column("Girder", "C{1.6cm}"),
+        Column("Controlling LC / Combination", ">{\\centering\\arraybackslash}p{3.6cm}"),
+        Column("Controlling Check", "C{2.4cm}"),
+        Column("Demand", "C{2.0cm}"),
+        Column("Capacity", "C{2.1cm}"),
+        Column("UR", "C{1.7cm}"),
+        Column("Status", "C{1.5cm}"),
+    ]
+    rows = []
+    for g in girders:
+        sm = g.summary
+        rows.append([
+            g.girder_label,
+            sm.governing_lc or "",
+            sm.controlling_check or "",
+            _fmt_qv_unit(sm.demand) if sm.demand else "---",
+            _fmt_qv_unit(sm.capacity) if sm.capacity else "---",
+            _fmt_ratio(sm.dcr, nd=3),
+            _fmt_status(sm.status),
+        ])
+    return Table(caption="Girder Design Summary (DCR / Utilization Ratio)", columns=cols, rows=rows)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def build_chapter_5(facts: ReportFacts) -> Chapter:
     """Build Chapter 5: Design Checks.
 
-    Delegates to the legacy ``ch5_design_checks()`` function which returns a
-    complete LaTeX chapter string.  The result is wrapped in a ``Chapter``
-    with a single ``RawLatex`` component.
-
-    Requires a ``ReportDataBridge`` instance, which is constructed from the
-    raw dicts stored on ``facts``.
+    If ``facts.design_check_data`` is available (Phase 5A), builds semantic
+    Tables 5.1–5.13 from typed GirderDesignData.  Otherwise falls back to the
+    legacy adapter for any remaining non-migrated tables.
     """
-    from osdagbridge.core.reports.chap5 import ch5_design_checks
-    from osdagbridge.core.reports.report_generator import ReportDataBridge
+    components = []
 
-    input_dict = facts.raw_input_dict or {}
-    output_dict = facts.raw_output_dict or {}
+    if facts.design_check_data is not None:
+        gd = facts.design_check_data
+        if gd.girders:
+            tables = [
+                _build_table_5_1(gd.girders),
+                _build_table_5_2(gd.girders),
+                _build_table_5_3(gd.girders),
+                _build_table_5_4(gd.girders),
+                _build_table_5_5(gd.girders),
+                _build_table_5_6(gd.girders),
+                _build_table_5_7(gd.girders),
+                _build_table_5_8(gd.girders),
+                _build_table_5_9(gd.girders),
+                _build_table_5_10(gd.girders),
+                _build_table_5_11(gd.girders),
+                _build_table_5_12(gd.girders),
+                _build_table_5_13(gd.girders),
+            ]
+            for tbl in tables:
+                components.append(tbl)
+                components.append(RawLatex(r"\vspace{1em}"))
+    else:
+        # Fallback: delegate to legacy ch5_design_checks
+        from osdagbridge.core.reports.chap5 import ch5_design_checks
+        from osdagbridge.core.reports.report_generator import ReportDataBridge
 
-    bridge = ReportDataBridge(output_dict, input_dict, _PayloadProxy(facts))
+        input_dict = facts.raw_input_dict or {}
+        output_dict = facts.raw_output_dict or {}
 
-    latex = ch5_design_checks(facts.design_checks or [], bridge)
+        bridge = ReportDataBridge(output_dict, input_dict, _PayloadProxy(facts))
+        latex = ch5_design_checks(facts.design_checks or [], bridge)
+        components.append(RawLatex(latex))
 
     return Chapter(
         number=5,
         title="Design Checks",
-        sections=[Section(title="", level=2, components=[RawLatex(latex)])],
+        sections=[Section(title="", level=2, components=components)],
     )
 
 
 class _PayloadProxy:
-    """Minimal proxy satisfying the ``ReportPayload`` interface accessed by
-    ``ReportDataBridge`` — only ``design_checks`` is read."""
+    """Minimal proxy satisfying the ReportPayload interface accessed by
+    ReportDataBridge -- only ``design_checks`` is read."""
 
     def __init__(self, facts: ReportFacts):
         self.design_checks = facts.design_checks or []

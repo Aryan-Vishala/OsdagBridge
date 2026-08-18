@@ -9,6 +9,7 @@
 # =============================================================================
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import List, Optional, Dict
 
 
@@ -44,6 +45,7 @@ class ReportFacts:
     utilization: Optional["UtilizationFacts"] = None
     materials: Optional["MaterialFacts"] = None
     inputs: Optional["InputFacts"] = None
+    design_check_data: Optional["DesignCheckData"] = None
 
     # Migration bridge: raw dicts needed by legacy chapter functions.
     # These will be removed once all chapters are fully migrated.
@@ -157,6 +159,197 @@ class LoadFacts:
 
 
 # ---------------------------------------------------------------------------
+# Check status
+# ---------------------------------------------------------------------------
+
+class CheckStatus(Enum):
+    """Semantic status for design checks. Renderer owns formatting."""
+    PASS = "pass"
+    WARN = "warn"
+    FAIL = "fail"
+    UNAVAILABLE = "unavailable"
+
+
+# ---------------------------------------------------------------------------
+# Design check facts (Chapter 5)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class GirderSectionProperties:
+    """Table 5.1 — girder section properties."""
+    girder_label: str
+    depth: QuantityValue
+    top_flange_width: QuantityValue
+    bottom_flange_width: QuantityValue
+    top_flange_thickness: QuantityValue
+    bottom_flange_thickness: QuantityValue
+    web_thickness: QuantityValue
+    gross_area: QuantityValue
+    moment_of_inertia: QuantityValue
+    elastic_section_modulus: QuantityValue
+    plastic_section_modulus: QuantityValue
+    effective_slab_width: QuantityValue
+    composite_iz: QuantityValue
+    pna_depth: QuantityValue
+
+
+@dataclass(frozen=True)
+class GirderClassification:
+    """Table 5.2 — section classification per IS 800 Table 2."""
+    flange_slenderness: Optional[float] = None
+    flange_class_limit: Optional[float] = None
+    class_flange: str = ""
+    web_slenderness: Optional[float] = None
+    web_class_limit: Optional[float] = None
+    class_web: str = ""
+    section_class: str = ""
+
+
+@dataclass(frozen=True)
+class GirderFlexureCheck:
+    """Table 5.3 — moment capacity check."""
+    mu_applied: Optional[QuantityValue] = None
+    md_capacity: Optional[QuantityValue] = None
+    utilization_ratio: Optional[float] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderShearCheck:
+    """Table 5.4 — shear capacity check."""
+    vu: Optional[QuantityValue] = None
+    shear_av: Optional[QuantityValue] = None
+    panel_cd: Optional[float] = None
+    shear_kv: Optional[float] = None
+    shear_lambda_w: Optional[float] = None
+    shear_tau_b: Optional[QuantityValue] = None
+    shear_vcr: Optional[QuantityValue] = None
+    utilization_ratio: Optional[float] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderInteractionCheck:
+    """Table 5.5 — M-V and M-N interaction."""
+    high_shear: str = ""
+    mdv: Optional[QuantityValue] = None
+    mv_ur: Optional[float] = None
+    mv_status: CheckStatus = CheckStatus.UNAVAILABLE
+    mn_axial: Optional[float] = None
+    mn_moment: Optional[float] = None
+    mn_ratio: Optional[float] = None
+    mn_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderLTBCheck:
+    """Table 5.6 — lateral torsional buckling."""
+    mcr: Optional[QuantityValue] = None
+    ltb_lambda: Optional[float] = None
+    ltb_chi: Optional[float] = None
+    ltb_mb: Optional[QuantityValue] = None
+    utilization_ratio: Optional[float] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderStiffenerSummary:
+    """Table 5.7 — stiffener design summary."""
+    method: str = ""
+    int_thick: Optional[QuantityValue] = None
+    int_spacing: Optional[QuantityValue] = None
+    end_thick: Optional[QuantityValue] = None
+    end_count: Optional[int] = None
+    long_stiff: str = ""
+
+
+@dataclass(frozen=True)
+class GirderIntermediateStiffenerCheck:
+    """Table 5.8 — IS 800 Cl. 8.7.1.2 (conditional: Custom mode only)."""
+    iys_min: Optional[QuantityValue] = None
+    iys_prov: Optional[QuantityValue] = None
+    iys_status: CheckStatus = CheckStatus.UNAVAILABLE
+    fq: Optional[QuantityValue] = None
+    fqd: Optional[QuantityValue] = None
+    fqd_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderBearingStiffenerCheck:
+    """Table 5.9 — end panel stiffener checks."""
+    wb_req: Optional[QuantityValue] = None
+    wb_prov: Optional[QuantityValue] = None
+    wb_status: CheckStatus = CheckStatus.UNAVAILABLE
+    lc_req: Optional[QuantityValue] = None
+    lc_prov: Optional[QuantityValue] = None
+    lc_status: CheckStatus = CheckStatus.UNAVAILABLE
+    ps_req: Optional[QuantityValue] = None
+    ps_prov: Optional[QuantityValue] = None
+    ps_status: CheckStatus = CheckStatus.UNAVAILABLE
+    cb_req: Optional[QuantityValue] = None
+    cb_prov: Optional[QuantityValue] = None
+    cb_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderDeflectionCheck:
+    """Table 5.10 — serviceability deflection."""
+    allow_live: Optional[QuantityValue] = None
+    allow_total: Optional[QuantityValue] = None
+    actual_live: Optional[QuantityValue] = None
+    actual_total: Optional[QuantityValue] = None
+    live_status: CheckStatus = CheckStatus.UNAVAILABLE
+    total_status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderStressCheck:
+    """Table 5.11 — SLS stress limitation."""
+    allowable_stress: Optional[QuantityValue] = None
+    actual_stress: Optional[QuantityValue] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderFatigueCheck:
+    """Table 5.12 — fatigue assessment."""
+    stress_range: Optional[QuantityValue] = None
+    fatigue_limit: Optional[QuantityValue] = None
+    utilization_ratio: Optional[float] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderDesignSummary:
+    """Table 5.13 — per-girder DCR summary."""
+    governing_lc: str = ""
+    controlling_check: str = ""
+    demand: Optional[QuantityValue] = None
+    capacity: Optional[QuantityValue] = None
+    dcr: Optional[float] = None
+    status: CheckStatus = CheckStatus.UNAVAILABLE
+
+
+@dataclass(frozen=True)
+class GirderDesignData:
+    """Complete design data for one girder (Tables 5.1–5.13)."""
+    girder_label: str
+    section_properties: GirderSectionProperties
+    classification: GirderClassification
+    flexure: GirderFlexureCheck
+    shear: GirderShearCheck
+    interaction: GirderInteractionCheck
+    ltb: GirderLTBCheck
+    stiffener_summary: GirderStiffenerSummary
+    intermediate_stiffener: Optional[GirderIntermediateStiffenerCheck] = None
+    bearing_stiffener: GirderBearingStiffenerCheck = field(default_factory=GirderBearingStiffenerCheck)
+    deflection: GirderDeflectionCheck = field(default_factory=GirderDeflectionCheck)
+    stress: GirderStressCheck = field(default_factory=GirderStressCheck)
+    fatigue: GirderFatigueCheck = field(default_factory=GirderFatigueCheck)
+    summary: GirderDesignSummary = field(default_factory=GirderDesignSummary)
+
+
+# ---------------------------------------------------------------------------
 # Utilization facts
 # ---------------------------------------------------------------------------
 
@@ -210,3 +403,17 @@ class InputFacts:
     section: Dict[str, QuantityValue] = field(default_factory=dict)
     weather: Dict[str, QuantityValue] = field(default_factory=dict)
     design_options: Dict[str, QuantityValue] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Design check data (Chapter 5 — top-level container)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DesignCheckData:
+    """Typed view of analysis results for Chapter 5.
+
+    Phase 5A: only ``girders`` is populated.  Other fields will be added
+    in Phases 5B (deck, shear connectors) and 5C (bracing, summary).
+    """
+    girders: tuple[GirderDesignData, ...] = ()

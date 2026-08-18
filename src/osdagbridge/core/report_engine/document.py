@@ -22,18 +22,33 @@ class Column:
     width: str = ""
 
 
+@dataclass(frozen=True)
+class TableGroup:
+    """A labelled group of rows within a Table.
+
+    When present, the renderer emits ``\\multirow`` for the group label
+    spanning all rows in the group.  ``rows`` contains plain-text cell
+    values — the first element of each row is typically empty (the
+    renderer merges it into the group label via ``\\multirow``).
+    """
+
+    label: str
+    rows: List[List[str]]
+
+
 @dataclass
 class Table:
     """A longtable with caption, semantic columns, and data rows.
 
-    ``columns`` defines the header row.  ``rows`` contains plain-text cell
-    values — no LaTeX syntax.  The renderer is responsible for escaping and
-    formatting.
+    ``columns`` defines the header row.  Exactly one of ``rows`` (flat)
+    or ``groups`` (labelled row groups with \\multirow) must be provided.
+    Cell values are plain text — the renderer escapes and formats them.
     """
 
     caption: str
     columns: List[Column]
-    rows: List[List[str]]
+    rows: Optional[List[List[str]]] = None
+    groups: Optional[List[TableGroup]] = None
     layout: LayoutHints = field(default_factory=LayoutHints)
     label: str = ""
 
