@@ -817,6 +817,24 @@ def build_deck_design_data(
         detailing=detailing
     )
 
+def build_cross_bracing_data(output_dict: dict) -> CrossBracingData | None:
+    # 5C.1 Implementation goes here
+    pass
+
+def build_end_diaphragm_data(output_dict: dict, input_dict: dict) -> EndDiaphragmData | None:
+    # 5C.2 Implementation goes here
+    pass
+
+def build_overall_summary_data(
+    girders: tuple[GirderDesignData, ...],
+    deck: DeckDesignData | None,
+    cb: CrossBracingData | None,
+    ed: EndDiaphragmData | None,
+    output_dict: dict,
+) -> OverallSummaryData | None:
+    # 5C.3 Implementation goes here
+    pass
+
 def build_design_check_data(
     output_dict: dict,
     input_dict: dict,
@@ -825,9 +843,15 @@ def build_design_check_data(
     girders = build_girder_design_data(output_dict, input_dict)
     sc_data = build_shear_connector_data(output_dict, input_dict)
     dk_data = build_deck_design_data(output_dict, input_dict)
+    cb_data = build_cross_bracing_data(output_dict)
+    ed_data = build_end_diaphragm_data(output_dict, input_dict)
+    summary_data = build_overall_summary_data(girders, dk_data, cb_data, ed_data, output_dict)
     
     return DesignCheckData(
         girders=girders,
         shear_connectors=sc_data,
-        deck=dk_data
+        deck=dk_data,
+        cross_bracing=cb_data,
+        end_diaphragm=ed_data,
+        summary=summary_data
     )

@@ -543,3 +543,74 @@ class DesignCheckData:
     girders: tuple[GirderDesignData, ...] = ()
     shear_connectors: Optional[ShearConnectorData] = None
     deck: Optional[DeckDesignData] = None
+    cross_bracing: Optional['CrossBracingData'] = None
+    end_diaphragm: Optional['EndDiaphragmData'] = None
+    summary: Optional['OverallSummaryData'] = None
+
+
+# ---------------------------------------------------------------------------
+# Cross Bracing & End Diaphragm Data (Phase 5C)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BracingMemberCheck:
+    """Axial design check for a single member (diagonal or chord)."""
+    demand: Optional[QuantityValue]
+    capacity: Optional[QuantityValue]
+    ur: Optional[float]
+    status: CheckStatus
+    governing_lc: Optional[str]
+    connection_type: Optional[str]
+    section: Optional[str]
+
+@dataclass(frozen=True)
+class BracingPanelData:
+    """Design data for a single bracing panel (e.g. between G1-G2)."""
+    pair_label: str
+    diagonal_tension: Optional[BracingMemberCheck]
+    diagonal_compression: Optional[BracingMemberCheck]
+    chord_tension: Optional[BracingMemberCheck]
+    chord_compression: Optional[BracingMemberCheck]
+    slenderness_ur: Optional[float]
+    slenderness_status: CheckStatus
+
+@dataclass(frozen=True)
+class CrossBracingData:
+    panels: tuple[BracingPanelData, ...]
+
+@dataclass(frozen=True)
+class EndDiaphragmData:
+    diaphragm_type: Optional[str]
+    panels: tuple[BracingPanelData, ...]
+    flexural_checks: Optional[tuple] = None
+
+
+# ---------------------------------------------------------------------------
+# Overall Summary Data (Phase 5C)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SummaryCheckRecord:
+    """A single governing row in Table 5.22."""
+    label: str
+    demand: Optional[QuantityValue]
+    capacity: Optional[QuantityValue]
+    ur: Optional[float]
+    status: CheckStatus
+    governing_lc: Optional[str]
+
+@dataclass(frozen=True)
+class ComponentSummary:
+    """Aggregates the worst-case checks for a major component."""
+    component_name: str
+    records: tuple[SummaryCheckRecord, ...]
+    max_ur: Optional[float]
+    status: CheckStatus
+
+@dataclass(frozen=True)
+class OverallSummaryData:
+    girders: ComponentSummary
+    deck: ComponentSummary
+    cross_bracing: Optional[ComponentSummary]
+    end_diaphragm: Optional[ComponentSummary]
+
