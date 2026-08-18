@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from osdagbridge.core.utils import common as c
 from osdagbridge.core.utils.common import (
     KEY_DESIGN_MODE,
     KEY_SD_BOTTOM_FLANGE_THICKNESS,
@@ -98,6 +99,13 @@ from . import (
     DeckCrackWidthCheck,
     DeckDetailingCheck,
     DeckDesignData,
+    BracingMemberCheck,
+    BracingPanelData,
+    CrossBracingData,
+    EndDiaphragmData,
+    SummaryCheckRecord,
+    ComponentSummary,
+    OverallSummaryData,
 )
 
 # ---------------------------------------------------------------------------
@@ -817,13 +825,124 @@ def build_deck_design_data(
         detailing=detailing
     )
 
+def _build_panel_data(pair: str, forces: dict, designs: dict) -> BracingPanelData:
+    def build_member(member: str, force_type: str) -> BracingMemberCheck | None:
+        pfx = "diag" if member == "diagonal" else "chord"
+        key = f"{pfx}_{force_type}_kN"
+        if forces.get(key) is None:
+            return None
+        
+        gov_lc = forces.get(f"{pfx}_{force_type}_gov_lc")
+        
+        mem_designs = designs.get(member) or {}
+        raw_design = mem_designs.get(force_type) or {}
+        
+        def _first(*keys):
+            for k in keys:
+                v = raw_design.get(k)
+                if v is not None:
+                    return v
+            return None
+            
+        osdag = {}
+        if raw_design:
+            osdag = {
+                "section":     _first("section_size.designation", "Optimum.Designation"),
+                "capacity_kN": _first("Member.tension_capacity",  "Design.Strength"),
+                "efficiency":  _first("Member.efficiency",        "Optimum.UR"),
+                "slenderness": raw_design.get("Member.Slenderness"),
+                "connection":  "Welded" if "Weld.Type" in raw_design else "Bolted",
+            }
+        
+        dem_val = _qv(forces.get(key), "kN")
+        cap_val = _qv(osdag.get("capacity_kN"), "kN")
+        eff = osdag.get("efficiency")
+        try:
+            ur = float(eff) if eff is not None else None
+            status = CheckStatus.PASS if ur is not None and ur <= 1.0 else (CheckStatus.FAIL if ur is not None else CheckStatus.UNAVAILABLE)
+        except (TypeError, ValueError):
+            ur = None
+            status = CheckStatus.UNAVAILABLE
+            
+        return BracingMemberCheck(
+            demand=dem_val,
+            capacity=cap_val,
+            ur=ur,
+            status=status,
+            governing_lc=str(gov_lc) if gov_lc else None,
+            connection_type=str(osdag.get("connection")) if osdag.get("connection") else None,
+            section=str(osdag.get("section")) if osdag.get("section") else None,
+        )
+
+    max_s_ur = None
+    for member in ("diagonal", "chord"):
+        lim = 400.0 if member == "chord" else 250.0
+        for ft in ("compression", "tension"):
+            mem_designs = designs.get(member) or {}
+            raw_design = mem_designs.get(ft) or {}
+            s = raw_design.get("Member.Slenderness")
+            if s is not None:
+                try:
+                    ratio = float(s) / lim
+                    if max_s_ur is None or ratio > max_s_ur:
+                        max_s_ur = ratio
+                except (TypeError, ValueError):
+                    pass
+    
+    s_ur = max_s_ur
+    s_status = CheckStatus.PASS if s_ur is not None and s_ur <= 1.0 else (CheckStatus.FAIL if s_ur is not None else CheckStatus.UNAVAILABLE)
+
+    return BracingPanelData(
+        pair_label=pair,
+        diagonal_tension=build_member("diagonal", "tension"),
+        diagonal_compression=build_member("diagonal", "compression"),
+        chord_tension=build_member("chord", "tension"),
+        chord_compression=build_member("chord", "compression"),
+        slenderness_ur=s_ur,
+        slenderness_status=s_status,
+    )
+
 def build_cross_bracing_data(output_dict: dict) -> CrossBracingData | None:
-    # 5C.1 Implementation goes here
-    pass
+    forces_dict = output_dict.get("crossbracing_forces_dict") or {}
+    designs_dict = output_dict.get("crossbracing_design_results") or {}
+    
+    pairs_data = forces_dict.get("pairs") or {}
+    if not pairs_data:
+        return None
+        
+    panels = []
+    for pair_name in sorted(pairs_data.keys()):
+        pair_forces = pairs_data[pair_name]
+        pair_designs = designs_dict.get(pair_name) or {}
+        panels.append(_build_panel_data(pair_name, pair_forces, pair_designs))
+        
+    return CrossBracingData(panels=tuple(panels))
 
 def build_end_diaphragm_data(output_dict: dict, input_dict: dict) -> EndDiaphragmData | None:
-    # 5C.2 Implementation goes here
-    pass
+    ed_type = ""
+    for k, v in input_dict.items():
+        if str(k).startswith(c.KEY_MP_ED_TYPE) and v:
+            ed_type = str(v)
+            break
+            
+    is_cb = "brac" in ed_type.strip().lower()
+    panels = []
+    
+    if is_cb:
+        forces_dict = output_dict.get("crossbracing_forces_dict") or {}
+        designs_dict = output_dict.get("crossbracing_design_results") or {}
+        pairs_data = forces_dict.get("pairs") or {}
+        
+        for pair_name in sorted(pairs_data.keys()):
+            pair_forces = pairs_data[pair_name]
+            pair_designs = designs_dict.get(pair_name) or {}
+            panels.append(_build_panel_data(pair_name, pair_forces, pair_designs))
+            
+    return EndDiaphragmData(
+        diaphragm_type=ed_type if ed_type else None,
+        panels=tuple(panels),
+        flexural_checks=None
+    )
 
 def build_overall_summary_data(
     girders: tuple[GirderDesignData, ...],
@@ -832,8 +951,244 @@ def build_overall_summary_data(
     ed: EndDiaphragmData | None,
     output_dict: dict,
 ) -> OverallSummaryData | None:
-    # 5C.3 Implementation goes here
-    pass
+    # --- Girder Summary ---
+    # Need to find the worst-case checks across all girders
+    # The logic requires scanning per_lc / checks. We'll use output_dict['design_results']['per_girder']
+    _pg_522 = (output_dict.get("design_results", {}) or {}).get("per_girder", {}) or {}
+    
+    def _dcr_row(label: str, check_ids: set, fallback_unit: str = "") -> SummaryCheckRecord:
+        best = None
+        for g, gd in _pg_522.items():
+            if str(g).startswith("EB"):
+                continue
+            for chk in (gd.get("checks") or []):
+                if chk.get("check_id") in check_ids:
+                    d = chk.get("dcr") or 0.0
+                    if best is None or d > best[0]:
+                        best = (d, chk.get("demand"), chk.get("capacity"), chk.get("demand_unit") or "", chk.get("capacity_unit") or "", g)
+        if best is not None:
+            d, dem, cap, du, cu, g = best
+            
+            # Find gov_lc
+            gov_lc = None
+            for _lc, _ld in (_pg_522.get(g, {}).get("per_lc") or {}).items():
+                if str(_lc).lower().startswith("envelope"): continue
+                for _chk in (_ld.get("checks") or []):
+                    if _chk.get("id") in check_ids:
+                        _d = _chk.get("dcr") or 0.0
+                        if _d == d: # found it
+                            gov_lc = str(_lc).strip()
+                            break
+                if gov_lc: break
+            
+            return SummaryCheckRecord(
+                label=label,
+                demand=_qv(dem, du or fallback_unit),
+                capacity=_qv(cap, cu or fallback_unit),
+                ur=d,
+                status=CheckStatus.PASS if d <= 1.0 else CheckStatus.FAIL,
+                governing_lc=gov_lc
+            )
+            
+        # Fallback to per_lc
+        best = None
+        for g, gd in _pg_522.items():
+            if str(g).startswith("EB"):
+                continue
+            for _lc, _ld in (gd.get("per_lc") or {}).items():
+                if str(_lc).lower().startswith("envelope"): continue
+                for chk in (_ld.get("checks") or []):
+                    if chk.get("id") in check_ids:
+                        d = chk.get("dcr") or 0.0
+                        if best is None or d > best[0]:
+                            best = (d, chk.get("demand"), chk.get("capacity"), _lc)
+        if best is not None:
+            d, dem, cap, _lc = best
+            return SummaryCheckRecord(
+                label=label,
+                demand=_qv(dem, fallback_unit),
+                capacity=_qv(cap, fallback_unit),
+                ur=d,
+                status=CheckStatus.PASS if d <= 1.0 else CheckStatus.FAIL,
+                governing_lc=str(_lc).strip()
+            )
+        
+        return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
+        
+    girder_records = (
+        _dcr_row("Girder — Moment", {1}),
+        _dcr_row("Girder — Shear", {2}),
+        _dcr_row("Girder — LTB (constr.)", {5}),
+        _dcr_row("Girder — Deflection", {13, 14}, "mm"),
+        _dcr_row("Girder — Stress", {11}, "MPa"),
+        _dcr_row("Girder — Fatigue", {8, 9}, "MPa"),
+        _dcr_row("Transverse Shear (slab)", {16})
+    )
+    girders_max = max((r.ur for r in girder_records if r.ur is not None), default=None)
+    girders_status = CheckStatus.PASS if girders_max is not None and girders_max <= 1.0 else (CheckStatus.FAIL if girders_max is not None else CheckStatus.UNAVAILABLE)
+    if girders_max is not None:
+        # Override component status based on the governing check's status
+        for r in girder_records:
+            if r.ur == girders_max:
+                girders_status = r.status
+                break
+                
+    girders_comp = ComponentSummary("Steel Plate Girders", girder_records, girders_max, girders_status)
+
+    # --- Deck Summary ---
+    def _dkv(k):
+        dd = output_dict.get("deck_design_results") or {}
+        try:
+            return float(dd.get(k, 0))
+        except (TypeError, ValueError):
+            return 0.0
+            
+    _dk_has = bool(output_dict.get("deck_design_results"))
+    def _deck_row(label, dem_key, cap_key, unit, is_oh=False):
+        if not _dk_has:
+            return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
+        
+        _dk_oh = bool(output_dict.get("deck_design_results", {}).get(c.KEY_DD_M_ULS_OH))
+        if is_oh and not _dk_oh:
+             return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
+             
+        dem = _dkv(dem_key)
+        cap = _dkv(cap_key)
+        ur = (dem / cap) if cap > 0 else None
+        
+        # Deck is designed for IRC:6 Basic ULS.
+        gamma_dl = _dkv(c.KEY_DD_GAMMA_DL)
+        gamma_ll = _dkv(c.KEY_DD_GAMMA_LL)
+        deck_combo = f"Basic ULS: {gamma_dl:g}DL + {gamma_ll:g}LL"
+        
+        return SummaryCheckRecord(
+            label=label,
+            demand=_qv(dem, unit),
+            capacity=_qv(cap, unit),
+            ur=ur,
+            status=CheckStatus.PASS if ur is not None and ur <= 1.0 else (CheckStatus.FAIL if ur is not None else CheckStatus.UNAVAILABLE),
+            governing_lc=deck_combo
+        )
+        
+    def _gov_sls_frequent():
+        best = None
+        for _g, _gd in _pg_522.items():
+            if str(_g).startswith("EB"): continue
+            for _lc, _ld in (_gd.get("per_lc") or {}).items():
+                if "frequent" not in str(_lc).lower(): continue
+                _d = _ld.get("max_dcr") or 0.0
+                if best is None or _d > best[0]:
+                    best = (_d, _lc)
+        return str(best[1]).strip() if best else "Frequent SLS"
+
+    cw_dem = max((_dkv(k) for k in [c.KEY_DD_WK_BOT, c.KEY_DD_WK_TOP, c.KEY_DD_WK_OH]), default=0.0)
+    cw_cap = _dkv(c.KEY_DD_WK_LIMIT)
+    cw_ur = (cw_dem / cw_cap) if cw_cap > 0 else None
+    
+    deck_records = (
+        SummaryCheckRecord(
+            label="Crack Width (slab)",
+            demand=_qv(cw_dem, "mm") if _dk_has else None,
+            capacity=_qv(cw_cap, "mm") if _dk_has else None,
+            ur=cw_ur if _dk_has else None,
+            status=(CheckStatus.PASS if cw_ur <= 1.0 else CheckStatus.FAIL) if _dk_has and cw_ur is not None else CheckStatus.UNAVAILABLE,
+            governing_lc=_gov_sls_frequent() if _dk_has else None
+        ),
+        _deck_row("Deck — Flexure (sagging)", c.KEY_DD_M_ULS_SAG, c.KEY_DD_MU_BOT, "kN-m/m"),
+        _deck_row("Deck — Flexure (hogging)", c.KEY_DD_M_ULS_HOG, c.KEY_DD_MU_TOP, "kN-m/m"),
+        _deck_row("Deck — Cantilever Overhang", c.KEY_DD_M_ULS_OH, c.KEY_DD_MU_OH, "kN-m/m", True),
+        _deck_row("Deck — Punching Shear", c.KEY_DD_PUNCH_VED, c.KEY_DD_VRD_C_MPA, "MPa"),
+        _deck_row("Deck — One-Way Shear", c.KEY_DD_SHEAR_VED, c.KEY_DD_SHEAR_VRDC, "kN/m")
+    )
+    deck_max = max((r.ur for r in deck_records if r.ur is not None), default=None)
+    deck_status = CheckStatus.PASS if deck_max is not None and deck_max <= 1.0 else (CheckStatus.FAIL if deck_max is not None else CheckStatus.UNAVAILABLE)
+    if deck_max is not None:
+        for r in deck_records:
+            if r.ur == deck_max:
+                deck_status = r.status
+                break
+                
+    deck_comp = ComponentSummary("Concrete Deck Slab", deck_records, deck_max, deck_status)
+
+    # --- Cross Bracing Summary ---
+    def _cb_row(label: str, force_type: str, panels: tuple[BracingPanelData, ...]) -> SummaryCheckRecord:
+        best_check = None
+        for p in panels:
+            for mem in (
+                p.diagonal_tension if force_type == "tension" else p.diagonal_compression,
+                p.chord_tension if force_type == "tension" else p.chord_compression
+            ):
+                if mem and mem.ur is not None:
+                    if best_check is None or mem.ur > best_check.ur:
+                        best_check = mem
+        if best_check is None:
+            return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
+            
+        return SummaryCheckRecord(
+            label=label,
+            demand=best_check.demand,
+            capacity=best_check.capacity,
+            ur=best_check.ur,
+            status=best_check.status,
+            governing_lc=best_check.governing_lc
+        )
+
+    def _cb_slender_row(label: str, panels: tuple[BracingPanelData, ...]) -> SummaryCheckRecord:
+        best_ur = None
+        best_status = CheckStatus.UNAVAILABLE
+        for p in panels:
+            if p.slenderness_ur is not None:
+                if best_ur is None or p.slenderness_ur > best_ur:
+                    best_ur = p.slenderness_ur
+                    best_status = p.slenderness_status
+        return SummaryCheckRecord(label, None, None, best_ur, best_status, None)
+
+    cb_comp = None
+    if cb and cb.panels:
+        cb_records = (
+            _cb_row("Cross Bracing — Compression", "compression", cb.panels),
+            _cb_row("Cross Bracing — Tension", "tension", cb.panels),
+            _cb_slender_row("Cross Bracing — Slenderness", cb.panels)
+        )
+        cb_max = max((r.ur for r in cb_records if r.ur is not None), default=None)
+        cb_status = CheckStatus.PASS if cb_max is not None and cb_max <= 1.0 else (CheckStatus.FAIL if cb_max is not None else CheckStatus.UNAVAILABLE)
+        if cb_max is not None:
+            for r in cb_records:
+                if r.ur == cb_max:
+                    cb_status = r.status
+                    break
+        cb_comp = ComponentSummary("Cross Bracing", cb_records, cb_max, cb_status)
+
+    # --- End Diaphragm Summary ---
+    ed_comp = None
+    if ed:
+        if ed.panels:
+            ed_records = (
+                _cb_row("End Diaphragm — Compression", "compression", ed.panels),
+                _cb_row("End Diaphragm — Tension", "tension", ed.panels),
+            )
+            ed_max = max((r.ur for r in ed_records if r.ur is not None), default=None)
+            ed_status = CheckStatus.PASS if ed_max is not None and ed_max <= 1.0 else (CheckStatus.FAIL if ed_max is not None else CheckStatus.UNAVAILABLE)
+            if ed_max is not None:
+                for r in ed_records:
+                    if r.ur == ed_max:
+                        ed_status = r.status
+                        break
+            ed_comp = ComponentSummary("End Diaphragms", ed_records, ed_max, ed_status)
+        else:
+            # Emulate legacy report: Rolled / Welded section — design to be added
+            ed_records = (
+                SummaryCheckRecord("End Diaphragm — Moment", None, None, None, CheckStatus.UNAVAILABLE, None),
+                SummaryCheckRecord("End Diaphragm — Shear", None, None, None, CheckStatus.UNAVAILABLE, None)
+            )
+            ed_comp = ComponentSummary("End Diaphragms", ed_records, None, CheckStatus.UNAVAILABLE)
+
+    return OverallSummaryData(
+        girders=girders_comp,
+        deck=deck_comp,
+        cross_bracing=cb_comp,
+        end_diaphragm=ed_comp
+    )
 
 def build_design_check_data(
     output_dict: dict,
