@@ -19,10 +19,9 @@ class TestFullPipeline:
 
     @patch("osdagbridge.core.reports.chap7.ch7_quantities")
     @patch("osdagbridge.core.reports.chap5.ch5_design_checks")
-    @patch("osdagbridge.core.reports.chap3.ch3_loads")
     @patch("osdagbridge.core.reports.chap2.ch2_input_parameters")
     def test_all_chapters_produce_latex(
-        self, mock_ch2, mock_ch3, mock_ch5, mock_ch7
+        self, mock_ch2, mock_ch5, mock_ch7
     ):
         mock_ch2.return_value = (
             r"\chapter{Input Parameters}"
@@ -33,11 +32,6 @@ class TestFullPipeline:
             r"\end{tabular}"
             r"\end{table}"
             r"Project location table here."
-        )
-        mock_ch3.return_value = (
-            r"\chapter{Loads and Load Combinations}"
-            r"\section{Dead Loads}"
-            r"Dead load table here."
         )
         mock_ch5.return_value = (
             r"\chapter{Design Checks}"
@@ -99,7 +93,10 @@ class TestFullPipeline:
         assert r"\chapter{Design Checks}" in latex
         assert r"\chapter{Material Take-off" in latex
         assert "Project location table here" in latex
-        assert "Dead load table here" in latex
+        # Ch3 is migrated: assert actual semantic output
+        assert "Dead Load -- Self Weight" in latex
+        assert "Live Loads (LL)" in latex
+        assert "Load Combinations" in latex
         assert "Flexure check table here" in latex
         assert "BOQ table here" in latex
 

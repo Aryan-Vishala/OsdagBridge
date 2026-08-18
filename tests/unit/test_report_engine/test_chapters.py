@@ -90,13 +90,11 @@ class TestBuildChapter2:
 
 
 # ---------------------------------------------------------------------------
-# Chapter 3
+# Chapter 3 — migrated: uses build_load_facts, returns semantic Tables
 # ---------------------------------------------------------------------------
 
 class TestBuildChapter3:
-    @patch("osdagbridge.core.reports.chap3.ch3_loads")
-    def test_returns_chapter_with_raw_latex(self, mock_fn):
-        mock_fn.return_value = r"\chapter{Loads}Load content"
+    def test_returns_chapter_with_semantic_tables(self):
         facts = _make_facts()
 
         from osdagbridge.core.report_engine.chapters.ch3_document import build_chapter_3
@@ -105,19 +103,57 @@ class TestBuildChapter3:
         assert isinstance(ch, Chapter)
         assert ch.number == 3
         assert ch.title == "Loads and Load Combinations"
-        assert isinstance(ch.sections[0].components[0], RawLatex)
-        assert "Load content" in ch.sections[0].components[0].content
-        mock_fn.assert_called_once()
+        assert len(ch.sections) == 1
+        assert ch.sections[0].title == ""
 
-    @patch("osdagbridge.core.reports.chap3.ch3_loads")
-    def test_passes_raw_input_dict(self, mock_fn):
-        mock_fn.return_value = r"\chapter{Loads}"
-        facts = _make_facts(raw_input_dict={"wind_speed": 39})
+    def test_raw_latex_note_present(self):
+        facts = _make_facts()
 
         from osdagbridge.core.report_engine.chapters.ch3_document import build_chapter_3
-        build_chapter_3(facts)
+        ch = build_chapter_3(facts)
 
-        assert mock_fn.call_args[0][0] == {"wind_speed": 39}
+        from osdagbridge.core.report_engine.document import RawLatex
+        raw_components = [c for c in ch.sections[0].components if isinstance(c, RawLatex)]
+        assert any("auto-generated" in r.content for r in raw_components)
+
+    def test_tables_are_table_instances(self):
+        facts = _make_facts()
+
+        from osdagbridge.core.report_engine.chapters.ch3_document import build_chapter_3
+        ch = build_chapter_3(facts)
+
+        from osdagbridge.core.report_engine.document import Table
+        tables = [c for c in ch.sections[0].components if isinstance(c, Table)]
+        assert len(tables) == 7
+        captions = [t.caption for t in tables]
+        assert "Dead Load -- Self Weight" in captions
+        assert "Live Loads (LL)" in captions
+        assert "Load Combinations" in captions
+
+    def test_dead_load_table_reads_from_facts(self):
+        facts = _make_facts()
+
+        from osdagbridge.core.report_engine.chapters.ch3_document import build_chapter_3
+        ch = build_chapter_3(facts)
+
+        from osdagbridge.core.report_engine.document import Table
+        tables = [c for c in ch.sections[0].components if isinstance(c, Table)]
+        dl_table = next(t for t in tables if "Dead Load" in t.caption)
+        assert len(dl_table.rows) == 3
+        assert dl_table.rows[0][0] == "Steel Self-Weight Applied"
+        assert dl_table.rows[1][0] == "Concrete Deck Weight"
+        assert dl_table.rows[2][0] == "Self-Weight Factor"
+
+    def test_load_combination_table_has_rows(self):
+        facts = _make_facts()
+
+        from osdagbridge.core.report_engine.chapters.ch3_document import build_chapter_3
+        ch = build_chapter_3(facts)
+
+        from osdagbridge.core.report_engine.document import Table
+        tables = [c for c in ch.sections[0].components if isinstance(c, Table)]
+        lc_table = next(t for t in tables if t.caption == "Load Combinations")
+        assert len(lc_table.rows) >= 13
 
 
 # ---------------------------------------------------------------------------

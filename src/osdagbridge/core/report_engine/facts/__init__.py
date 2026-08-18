@@ -70,15 +70,23 @@ class FactMetadata:
 
 @dataclass(frozen=True)
 class DeadLoadFact:
-    parameter: str
-    value: QuantityValue
+    steel_density: QuantityValue
+    concrete_density: QuantityValue
+    self_weight_factor: QuantityValue
+
+
+@dataclass(frozen=True)
+class SurfacingLoadFact:
+    wearing_course_material: str
+    wearing_course_thickness: QuantityValue
+    crash_barrier_load: QuantityValue
+    railing_load: QuantityValue
 
 
 @dataclass(frozen=True)
 class VehicleLiveLoadFact:
     vehicle_class: str
     impact_factor: Optional[QuantityValue] = None
-    braking_load: Optional[QuantityValue] = None
     centrifugal_force: Optional[QuantityValue] = None
 
 
@@ -89,38 +97,63 @@ class FootwayLoadFact:
 
 
 @dataclass(frozen=True)
+class LiveLoadFact:
+    vehicles: tuple[VehicleLiveLoadFact, ...] = ()
+    braking_force: Optional[QuantityValue] = None
+    footway_load: Optional[FootwayLoadFact] = None
+
+
+@dataclass(frozen=True)
 class WindLoadFact:
-    parameter: str
-    value: QuantityValue
+    basic_wind_speed: QuantityValue
+    terrain_type: str
+    avg_exposed_height: QuantityValue
+    hourly_mean_wind_speed: QuantityValue
+    hourly_wind_pressure: QuantityValue
+    transverse_wind_force: QuantityValue
+    longitudinal_wind_force: QuantityValue
+    vertical_wind_force: QuantityValue
 
 
 @dataclass(frozen=True)
 class SeismicLoadFact:
-    parameter: str
-    value: QuantityValue
+    seismic_zone: str
+    zone_factor: QuantityValue
+    importance_factor: QuantityValue
+    soil_type: str
+    spectral_coeff: QuantityValue
+    horizontal_coeff: QuantityValue
+    vertical_coeff: QuantityValue
+    horizontal_force_long: Optional[QuantityValue] = None
+    horizontal_force_trans: Optional[QuantityValue] = None
 
 
 @dataclass(frozen=True)
 class TemperatureLoadFact:
-    parameter: str
-    value: QuantityValue
+    max_shade_temp: QuantityValue
+    min_shade_temp: QuantityValue
+    bridge_temp_min: QuantityValue
+    bridge_temp_max: QuantityValue
+    temp_rise: QuantityValue
+    temp_fall: QuantityValue
 
 
 @dataclass(frozen=True)
 class LoadCombinationFact:
     combination_id: str
-    load_cases: str
+    load_cases: tuple[str, ...] = ()
+    factors: tuple[tuple[str, Optional[float], Optional[float]], ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoadFacts:
-    dead_loads: List[DeadLoadFact] = field(default_factory=list)
-    vehicle_live_loads: List[VehicleLiveLoadFact] = field(default_factory=list)
-    footway_loads: List[FootwayLoadFact] = field(default_factory=list)
-    wind_loads: List[WindLoadFact] = field(default_factory=list)
-    seismic_loads: List[SeismicLoadFact] = field(default_factory=list)
-    temperature_loads: List[TemperatureLoadFact] = field(default_factory=list)
-    load_combinations: List[LoadCombinationFact] = field(default_factory=list)
+    dead_load: DeadLoadFact
+    surfacing_load: SurfacingLoadFact
+    live_load: LiveLoadFact
+    wind_load: WindLoadFact
+    seismic_load: SeismicLoadFact
+    temperature_load: TemperatureLoadFact
+    load_combinations: tuple[LoadCombinationFact, ...] = ()
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ from osdagbridge.core.report_engine.facts import (
     DeadLoadFact,
     FactMetadata,
     FootwayLoadFact,
+    LiveLoadFact,
     LoadCombinationFact,
     LoadFacts,
     MaterialFacts,
@@ -13,6 +14,7 @@ from osdagbridge.core.report_engine.facts import (
     QuantityValue,
     ReportFacts,
     SeismicLoadFact,
+    SurfacingLoadFact,
     TemperatureLoadFact,
     UtilizationFact,
     UtilizationFacts,
@@ -78,11 +80,48 @@ class TestReportFacts:
 
     def test_report_facts_with_loads(self):
         lf = LoadFacts(
-            dead_loads=[DeadLoadFact("Self-weight", QuantityValue(25.0, "kN/m³"))],
+            dead_load=DeadLoadFact(
+                steel_density=QuantityValue(78.5, "kN/m³"),
+                concrete_density=QuantityValue(25.0, "kN/m³"),
+                self_weight_factor=QuantityValue(1.0, ""),
+            ),
+            surfacing_load=SurfacingLoadFact(
+                wearing_course_material="Bituminous Concrete",
+                wearing_course_thickness=QuantityValue(75, "mm"),
+                crash_barrier_load=QuantityValue(5.0, "kN/m"),
+                railing_load=QuantityValue(2.0, "kN/m"),
+            ),
+            live_load=LiveLoadFact(vehicles=()),
+            wind_load=WindLoadFact(
+                basic_wind_speed=QuantityValue(39.0, "m/s"),
+                terrain_type="Plain Terrain",
+                avg_exposed_height=QuantityValue(10.0, "m"),
+                hourly_mean_wind_speed=QuantityValue(36.5, "m/s"),
+                hourly_wind_pressure=QuantityValue(835.0, "N/m²"),
+                transverse_wind_force=QuantityValue(100.0, "kN"),
+                longitudinal_wind_force=QuantityValue(50.0, "kN"),
+                vertical_wind_force=QuantityValue(30.0, "kN"),
+            ),
+            seismic_load=SeismicLoadFact(
+                seismic_zone="Zone IV",
+                zone_factor=QuantityValue(0.36, ""),
+                importance_factor=QuantityValue(1.5, ""),
+                soil_type="Type II – Medium Soil",
+                spectral_coeff=QuantityValue(2.5, ""),
+                horizontal_coeff=QuantityValue(0.36, ""),
+                vertical_coeff=QuantityValue(0.24, ""),
+            ),
+            temperature_load=TemperatureLoadFact(
+                max_shade_temp=QuantityValue(48.0, "°C"),
+                min_shade_temp=QuantityValue(10.0, "°C"),
+                bridge_temp_min=QuantityValue(14.6, "°C"),
+                bridge_temp_max=QuantityValue(43.4, "°C"),
+                temp_rise=QuantityValue(14.4, "°C"),
+                temp_fall=QuantityValue(14.4, "°C"),
+            ),
         )
         facts = ReportFacts(metadata=self._make_metadata(), loads=lf)
-        assert len(facts.loads.dead_loads) == 1
-        assert facts.loads.dead_loads[0].value.value == 25.0
+        assert facts.loads.dead_load.steel_density.value == 78.5
 
 
 # ---------------------------------------------------------------------------
@@ -91,54 +130,118 @@ class TestReportFacts:
 
 class TestLoadFacts:
     def test_dead_load_fact_frozen(self):
-        dl = DeadLoadFact("parameter", QuantityValue(1.0, "unit"))
+        dl = DeadLoadFact(
+            steel_density=QuantityValue(78.5, "kN/m³"),
+            concrete_density=QuantityValue(25.0, "kN/m³"),
+            self_weight_factor=QuantityValue(1.0, ""),
+        )
         with pytest.raises(AttributeError):
-            dl.parameter = "changed"
+            dl.steel_density = QuantityValue(0, "")
 
     def test_vehicle_live_load_fact_defaults(self):
         v = VehicleLiveLoadFact(vehicle_class="Class 70R")
         assert v.impact_factor is None
-        assert v.braking_load is None
         assert v.centrifugal_force is None
 
     def test_vehicle_live_load_fact_with_values(self):
         v = VehicleLiveLoadFact(
             vehicle_class="Class A",
             impact_factor=QuantityValue(1.207, ""),
-            braking_load=QuantityValue(163.04, "kN"),
         )
         assert v.impact_factor.value == 1.207
-        assert v.braking_load.unit == "kN"
 
     def test_footway_load_fact(self):
-        f = FootwayLoadFact(load_type="Distributed", intensity=QuantityValue(4.905, "kN/m²"))
+        f = FootwayLoadFact(load_type="IRC 6 Cl. 206.1", intensity=QuantityValue(4.905, "kN/m²"))
         assert f.intensity.value == 4.905
 
     def test_wind_load_fact(self):
-        w = WindLoadFact("Basic Wind Speed", QuantityValue(39.0, "m/s"))
-        assert w.value.unit == "m/s"
+        w = WindLoadFact(
+            basic_wind_speed=QuantityValue(39.0, "m/s"),
+            terrain_type="Plain Terrain",
+            avg_exposed_height=QuantityValue(10.0, "m"),
+            hourly_mean_wind_speed=QuantityValue(36.5, "m/s"),
+            hourly_wind_pressure=QuantityValue(835.0, "N/m²"),
+            transverse_wind_force=QuantityValue(100.0, "kN"),
+            longitudinal_wind_force=QuantityValue(50.0, "kN"),
+            vertical_wind_force=QuantityValue(30.0, "kN"),
+        )
+        assert w.basic_wind_speed.unit == "m/s"
 
     def test_seismic_load_fact(self):
-        s = SeismicLoadFact("Zone Factor", QuantityValue(0.36, ""))
-        assert s.value.value == 0.36
+        s = SeismicLoadFact(
+            seismic_zone="Zone IV",
+            zone_factor=QuantityValue(0.36, ""),
+            importance_factor=QuantityValue(1.5, ""),
+            soil_type="Type II – Medium Soil",
+            spectral_coeff=QuantityValue(2.5, ""),
+            horizontal_coeff=QuantityValue(0.36, ""),
+            vertical_coeff=QuantityValue(0.24, ""),
+        )
+        assert s.zone_factor.value == 0.36
 
     def test_temperature_load_fact(self):
-        t = TemperatureLoadFact("Max Shade Temp", QuantityValue(48.0, "°C"))
-        assert t.value.value == 48.0
+        t = TemperatureLoadFact(
+            max_shade_temp=QuantityValue(48.0, "°C"),
+            min_shade_temp=QuantityValue(10.0, "°C"),
+            bridge_temp_min=QuantityValue(14.6, "°C"),
+            bridge_temp_max=QuantityValue(43.4, "°C"),
+            temp_rise=QuantityValue(14.4, "°C"),
+            temp_fall=QuantityValue(14.4, "°C"),
+        )
+        assert t.max_shade_temp.value == 48.0
 
     def test_load_combination_fact(self):
-        lc = LoadCombinationFact("ULS-01", "DL(1.5) + LL(1.5)")
+        lc = LoadCombinationFact(
+            combination_id="ULS-01",
+            load_cases=("DL", "LL"),
+            factors=(("DL", 1.5, None), ("LL", 1.5, None)),
+        )
         assert lc.combination_id == "ULS-01"
 
-    def test_load_facts_defaults_to_empty_lists(self):
-        lf = LoadFacts()
-        assert lf.dead_loads == []
-        assert lf.vehicle_live_loads == []
-        assert lf.footway_loads == []
-        assert lf.wind_loads == []
-        assert lf.seismic_loads == []
-        assert lf.temperature_loads == []
-        assert lf.load_combinations == []
+    def test_load_facts_is_frozen(self):
+        lf = LoadFacts(
+            dead_load=DeadLoadFact(
+                steel_density=QuantityValue(78.5, "kN/m³"),
+                concrete_density=QuantityValue(25.0, "kN/m³"),
+                self_weight_factor=QuantityValue(1.0, ""),
+            ),
+            surfacing_load=SurfacingLoadFact(
+                wearing_course_material="",
+                wearing_course_thickness=QuantityValue(None, "mm"),
+                crash_barrier_load=QuantityValue(None, "kN/m"),
+                railing_load=QuantityValue(None, "kN/m"),
+            ),
+            live_load=LiveLoadFact(vehicles=()),
+            wind_load=WindLoadFact(
+                basic_wind_speed=QuantityValue(None, "m/s"),
+                terrain_type="",
+                avg_exposed_height=QuantityValue(None, "m"),
+                hourly_mean_wind_speed=QuantityValue(None, "m/s"),
+                hourly_wind_pressure=QuantityValue(None, "N/m²"),
+                transverse_wind_force=QuantityValue(None, "kN"),
+                longitudinal_wind_force=QuantityValue(None, "kN"),
+                vertical_wind_force=QuantityValue(None, "kN"),
+            ),
+            seismic_load=SeismicLoadFact(
+                seismic_zone="",
+                zone_factor=QuantityValue(None, ""),
+                importance_factor=QuantityValue(None, ""),
+                soil_type="",
+                spectral_coeff=QuantityValue(None, ""),
+                horizontal_coeff=QuantityValue(None, ""),
+                vertical_coeff=QuantityValue(None, ""),
+            ),
+            temperature_load=TemperatureLoadFact(
+                max_shade_temp=QuantityValue(None, "°C"),
+                min_shade_temp=QuantityValue(None, "°C"),
+                bridge_temp_min=QuantityValue(None, "°C"),
+                bridge_temp_max=QuantityValue(None, "°C"),
+                temp_rise=QuantityValue(None, "°C"),
+                temp_fall=QuantityValue(None, "°C"),
+            ),
+        )
+        with pytest.raises(AttributeError):
+            lf.load_combinations = ()
 
 
 # ---------------------------------------------------------------------------
