@@ -72,7 +72,7 @@ def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
                 concrete_vol = span * overall_width * deck_thickness
                 concrete_deck = TakeoffItem(
                     item_description="Concrete (M40) for Deck Slab",
-                    unit_volume=None,
+                    unit_volume=QuantityValue(concrete_vol, "m³"),
                     quantity=1,
                     total_volume=QuantityValue(concrete_vol, "m³"),
                     unit_weight=QuantityValue(concrete_vol * 2.5, "MT"),
@@ -89,7 +89,7 @@ def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
                 rebar_area = rebar_vol / span if span > 0 else 0.0
                 rebar_deck = TakeoffItem(
                     item_description="Reinforcement Steel (Fe 500)",
-                    unit_volume=None,
+                    unit_volume=QuantityValue(rebar_vol, "m³"),
                     quantity=1,
                     total_volume=QuantityValue(rebar_vol, "m³"),
                     unit_weight=QuantityValue(rebar_wt_kg / 1000.0, "MT"),

@@ -3,9 +3,12 @@
 import pytest
 
 from osdagbridge.core.report_engine.facts import (
+    CheckStatus,
     DeadLoadFact,
+    DesignCheckData,
     FactMetadata,
     FootwayLoadFact,
+    GirderFlexureCheck,
     LiveLoadFact,
     LoadCombinationFact,
     LoadFacts,
@@ -14,7 +17,9 @@ from osdagbridge.core.report_engine.facts import (
     QuantityValue,
     ReportFacts,
     SeismicLoadFact,
+    StructuralSteelTakeoff,
     SurfacingLoadFact,
+    TakeoffItem,
     TemperatureLoadFact,
     UtilizationFact,
     UtilizationFacts,
@@ -293,25 +298,29 @@ class TestMaterialFacts:
             mq.item = "Changed"
 
     def test_material_facts_none_vs_zero(self):
-        """concrete_volume_m3=None means unavailable; 0.0 means genuinely zero."""
+        """concrete_volume=None means unavailable"""
         mf = MaterialFacts(
-            concrete_volume_m3=None,
-            reinforcement_mt=0.0,
+            structural_steel=StructuralSteelTakeoff(None, None, None, None, None),
+            concrete_volume=None,
+            reinforcement_steel=None,
+            shear_studs=None,
+            crash_barrier=None
         )
-        assert mf.concrete_volume_m3 is None
-        assert mf.reinforcement_mt == 0.0
+        assert mf.concrete_volume is None
 
     def test_structural_steel_none_values(self):
         mf = MaterialFacts(
-            structural_steel_mt={
-                "Girders": 12.5,
-                "Bracing": None,
-                "Diaphragms": 0.0,
-            }
+            structural_steel=StructuralSteelTakeoff(
+                TakeoffItem("Girders", None, 1, None, None, None), 
+                None, None, None, None
+            ),
+            concrete_volume=None,
+            reinforcement_steel=None,
+            shear_studs=None,
+            crash_barrier=None
         )
-        assert mf.structural_steel_mt["Girders"] == 12.5
-        assert mf.structural_steel_mt["Bracing"] is None
-        assert mf.structural_steel_mt["Diaphragms"] == 0.0
+        assert mf.structural_steel.girders is not None
+        assert mf.structural_steel.cross_bracing_top is None
 
 
 # ---------------------------------------------------------------------------

@@ -177,30 +177,20 @@ class TestBuildChapter3:
 # ---------------------------------------------------------------------------
 
 class TestBuildChapter7:
-    @patch("osdagbridge.core.reports.chap7.ch7_quantities")
-    def test_returns_chapter_with_raw_latex(self, mock_fn):
-        mock_fn.return_value = r"\chapter{Material Take-off}Qty content"
-        facts = _make_facts()
-
+    def test_returns_chapter_with_table(self):
+        facts = _make_facts(raw_input_dict={"typical_section.no_of_girders": "4"})
         from osdagbridge.core.report_engine.chapters.ch7_document import build_chapter_7
+        from osdagbridge.core.report_engine.document import Table
+        
         ch = build_chapter_7(facts)
 
         assert isinstance(ch, Chapter)
         assert ch.number == 7
         assert "Quantity Summary" in ch.title
-        assert isinstance(ch.sections[0].components[0], RawLatex)
-        assert "Qty content" in ch.sections[0].components[0].content
-        mock_fn.assert_called_once()
-
-    @patch("osdagbridge.core.reports.chap7.ch7_quantities")
-    def test_passes_raw_input_dict(self, mock_fn):
-        mock_fn.return_value = r"\chapter{Material}"
-        facts = _make_facts(raw_input_dict={"steel_girders_qty": "2"})
-
-        from osdagbridge.core.report_engine.chapters.ch7_document import build_chapter_7
-        build_chapter_7(facts)
-
-        assert mock_fn.call_args[0][0] == {"steel_girders_qty": "2"}
+        assert isinstance(ch.sections[0].components[0], Table)
+        
+        table = ch.sections[0].components[0]
+        assert len(table.rows) == 9 # 9 rows for items 1-6 including subitems
 
 
 # ---------------------------------------------------------------------------
