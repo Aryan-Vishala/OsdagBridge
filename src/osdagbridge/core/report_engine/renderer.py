@@ -309,7 +309,16 @@ class LatexRenderer:
         
         text_str = str(text) if text is not None else ""
         
-        # Pre-process unicode symbols to protect them from `_tex` and escape to math mode
+        # 1. Protect inline math blocks $...$ from being mangled by _tex
+        import re
+        math_blocks = []
+        def _save_math(m):
+            idx = len(math_blocks)
+            math_blocks.append(m.group(0))
+            return f"ZMATH{idx}ZZ"
+        text_str = re.sub(r"\$[^$]+\$", _save_math, text_str)
+
+        # 2. Pre-process unicode symbols to protect them from `_tex` and escape to math mode
         unicode_map = {
             "≤": r"$\leq$",
             "≥": r"$\geq$",
@@ -332,7 +341,9 @@ class LatexRenderer:
             "ρ": r"$\rho$",
             "σ": r"$\sigma$",
             "τ": r"$\tau$",
-            "χ": r"$\chi$"
+            "χ": r"$\chi$",
+            "ϕ": r"$\phi$",
+            "μ": r"$\mu$"
         }
         
         # Hide characters from _tex using a placeholder
@@ -342,9 +353,16 @@ class LatexRenderer:
         from osdagbridge.core.reports.report_utils import _tex
         escaped = _tex(text_str)
         
-        # Restore as LaTeX safe
+        # Fix text-mode inequality symbols so they do not render as ¿ in OT1
+        escaped = escaped.replace(">", r"$>$").replace("<", r"$<$")
+
+        # Restore unicode math
         for uni, latex_code in unicode_map.items():
             escaped = escaped.replace(f"ZUNIQ{ord(uni)}ZZ", latex_code)
+
+        # Restore preserved inline math blocks
+        for idx, math_tex in enumerate(math_blocks):
+            escaped = escaped.replace(f"ZMATH{idx}ZZ", math_tex)
             
         return escaped
 

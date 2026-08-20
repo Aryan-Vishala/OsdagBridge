@@ -292,6 +292,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \renewcommand{\footrule}{\vspace{-8pt}\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}}
 }
 \pagestyle{main}
+\raggedbottom
 \setstretch{1.15}
 
 % Custom Commands
@@ -309,6 +310,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \loadgeometry{landscape}
   \pagestyle{osdaglandscape}
   \fancyhfoffset[L,R]{0pt}
+  \setlength{\headwidth}{\textwidth}
 }{%
   \clearpage
   \loadgeometry{portrait}
@@ -316,6 +318,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \pdfpageheight=297mm
   \pagestyle{main}
   \fancyhfoffset[L,R]{0pt}
+  \setlength{\headwidth}{\textwidth}
 }
 
 % Software-default asterisk

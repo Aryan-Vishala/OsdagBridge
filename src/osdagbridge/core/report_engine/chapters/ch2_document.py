@@ -150,16 +150,10 @@ def _build_bridge_geometry_table(facts: ReportFacts) -> Table:
         val_str = f"{v.value:g}" if isinstance(v.value, (int, float)) else str(v.value)
         return f"{val_str}{unit}".strip()
 
-    skew = _val("skew_angle", "°")
+    skew = _val("skew_angle", "°") or "0°"
     skew_cell = [
         skew,
         " (IRC 24 Cl. 504.8 limit: ",
-        Math(r"\pm"),
-        "15",
-        Math(r"^\circ"),
-        ")",
-    ] if skew else [
-        "(IRC 24 Cl. 504.8 limit: ",
         Math(r"\pm"),
         "15",
         Math(r"^\circ"),
@@ -245,6 +239,14 @@ def _build_typical_section_table(facts: ReportFacts) -> Table:
         v = input_dict.get(key)
         return str(v) if v not in (None, "") else ""
 
+    cw_raw = input_dict.get("geometry.carriageway_width") or input_dict.get("carriageway_width") or 0
+    try:
+        cw_val = float(cw_raw)
+        est_lanes = max(1, int(cw_val / 3.5)) if cw_val > 0 else 2
+    except Exception:
+        est_lanes = 2
+    lanes_val = str(input_dict.get("typical_section.lane_details.lane_table_count") or input_dict.get("num_lanes") or est_lanes)
+
     return Table(
         caption="Typical Section Details",
         label="subsec:typical-section",
@@ -265,8 +267,7 @@ def _build_typical_section_table(facts: ReportFacts) -> Table:
             ],
             [
                 "No. of Traffic Lanes",
-                str(input_dict.get("typical_section.lane_details.lane_table_count") or "")
-                + (" (per IRC 5 Cl. 104.3.1)" if input_dict.get("typical_section.lane_details.lane_table_count") else ""),
+                f"{lanes_val} (per IRC 5 Cl. 104.3.1)",
             ],
         ],
         layout=LayoutHints(space_after_mm=4),

@@ -58,17 +58,16 @@ def get_girder_entries(input_dict):
     Returns:
         List[Tuple[str, str]]
     """
-    n = int(input_dict.get(KEY_TS_NO_OF_GIRDERS, 0))
+    try:
+        n = int(input_dict.get(KEY_TS_NO_OF_GIRDERS, 0) or 0)
+    except Exception:
+        n = 0
 
     entries = []
-
     for i in range(1, n + 1):
-        entries.append(
-            (
-                input_dict.get(f"{KEY_MP_GD_SELECT_GIRDER}.G{i}", ""),
-                input_dict.get(f"{KEY_MP_GD_MEMBER_ID}.G{i}.M1", ""),
-            )
-        )
+        lbl = input_dict.get(f"{KEY_MP_GD_SELECT_GIRDER}.G{i}") or f"G{i}"
+        mid = input_dict.get(f"{KEY_MP_GD_MEMBER_ID}.G{i}.M1") or f"G{i}M1"
+        entries.append((str(lbl), str(mid)))
 
     return entries
 

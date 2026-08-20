@@ -26,10 +26,17 @@ from ..facts import (
 # ---------------------------------------------------------------------------
 
 def _fmt_qv(qv: QuantityValue | None, fallback: str = "---") -> str:
-    """Format a QuantityValue for table display."""
+    """Format QuantityValue value as string without scientific notation."""
     if qv is None:
         return fallback
-    return f"{qv.value:g}"
+    v = qv.value
+    if isinstance(v, (int, float)):
+        if abs(v) >= 1e4:
+            return f"{v:,.2f}".rstrip('0').rstrip('.')
+        if abs(v) >= 1:
+            return f"{v:.3f}".rstrip('0').rstrip('.')
+        return f"{v:.4f}".rstrip('0').rstrip('.')
+    return str(v)
 
 
 def _fmt_status(status: CheckStatus) -> CheckStatus:
@@ -50,7 +57,8 @@ def _fmt_qv_unit(qv: QuantityValue | None, fallback: str = "---") -> str:
     """Format QuantityValue with trailing unit."""
     if qv is None:
         return fallback
-    return f"{qv.value:g} {qv.unit}" if qv.unit else f"{qv.value:g}"
+    v_str = _fmt_qv(qv, fallback)
+    return f"{v_str} {qv.unit}" if qv.unit else v_str
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +465,7 @@ def _build_table_5_17c(dk: DeckDesignData) -> Table:
             [["Overhang Length, ", Math(r"l_{oh}")], "---", _fmt_qv_unit(fx.overhang_length), "---"],
             ["Crash Barrier Load Moment", "IRC 6 Cl. 206.4", _fmt_qv_unit(fx.m_barrier), "---"],
             ["Dead Load Moment", [Math(r"w_{\mathrm{DL}}\,l_{oh}^2/2"), " + railing"], _fmt_qv_unit(fx.m_dl_oh), "---"],
-            ["Live Load Moment (eccentric wheel)", r"Wheel load $\times$ arm", _fmt_qv_unit(fx.m_ll_oh), "---"],
+            ["Live Load Moment (eccentric wheel)", [Math(r"\text{Wheel load} \times \text{arm}")], _fmt_qv_unit(fx.m_ll_oh), "---"],
             [["Total Hogging Moment, ", Math(r"M_{u,oh}")], f"{g_dl} DL + {g_ll} (LL + CB)", _fmt_qv_unit(fx.demand_overhang), "---"],
             [["Moment Capacity (top steel), ", Math(r"M_{Rd,oh}")], "IRC 112 Cl. 12.2", _fmt_qv_unit(fx.capacity_overhang), _fmt_status(fx.status_overhang)],
         ]
@@ -487,8 +495,8 @@ def _build_table_5_17d(dk: DeckDesignData) -> Table:
     
     rows = [
         [["Design Wheel Load (ULS), ", Math(r"V_{Ed}")], Math(r"\gamma_Q\,(1+IF)\,P_w"), _fmt_qv_unit(sh.punching_ved_kn), "---"],
-        ["Tyre Contact Area", r"$a \times b$ (IRC 6 Annex A)", tyre_str, "---"],
-        [["Loaded Area at mid-depth, ", Math(r"b_0")], r"$c_1 \times c_2$ (incl. WC dispersion)", c1_c2_str, "---"],
+        ["Tyre Contact Area", [Math(r"a \times b"), " (IRC 6 Annex A)"], tyre_str, "---"],
+        [["Loaded Area at mid-depth, ", Math(r"b_0")], [Math(r"c_1 \times c_2"), " (incl. WC dispersion)"], c1_c2_str, "---"],
         [["Control Perimeter, ", Math(r"u_1")], Math(r"2(c_1+c_2) + 4\pi d"), _fmt_qv_unit(sh.punching_u1), "---"],
         [["Punching Shear Stress, ", Math(r"v_{Ed}")], Math(r"V_{Ed} / (u_1\,d)"), _fmt_qv_unit(sh.punching_ved_mpa), "---"],
         [["Punching Resistance, ", Math(r"v_{Rd,c}")], "IRC 112 Eq. 10.1", _fmt_qv_unit(sh.punching_vrdc_mpa), "---"],
@@ -818,6 +826,8 @@ def _build_table_5_30(summary: OverallSummaryData | None) -> Table:
     for comp in (summary.girders, summary.deck, summary.cross_bracing, summary.end_diaphragm):
         if not comp: continue
         for r in comp.records:
+            if r.demand is None and r.capacity is None and r.ur is None and r.status in (None, CheckStatus.UNAVAILABLE):
+                continue
             rows.append([
                 r.label,
                 r.governing_lc or "---",
