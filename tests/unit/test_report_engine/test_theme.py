@@ -47,8 +47,12 @@ class TestChartStyle:
 class TestColorPalette:
     def test_defaults(self):
         cp = ColorPalette()
-        assert cp.primary == "#003366"
-        assert cp.accent == "#FF6600"
+        assert cp.primary == "#91B014"
+        assert cp.secondary == "#1E293B"
+        assert cp.accent == "#0284C7"
+        assert cp.steel == "#2563EB"
+        assert cp.concrete == "#0D9488"
+        assert cp.rebar == "#D97706"
 
 
 class TestReportTheme:

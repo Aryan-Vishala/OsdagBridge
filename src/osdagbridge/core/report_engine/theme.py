@@ -51,13 +51,19 @@ class TypographyStyle:
 
 @dataclass(frozen=True)
 class ColorPalette:
-    primary: str = "#003366"
-    secondary: str = "#444444"
-    accent: str = "#FF6600"
-    error: str = "#DD0000"
-    success: str = "#00AA00"
-    warning: str = "orange"
-    muted: str = "gray"
+    primary: str = "#91B014"        # Osdag Brand Green
+    primary_dark: str = "#5C720D"   # Deep Forest Brand Accent
+    secondary: str = "#1E293B"      # Deep Slate / Structural Navy
+    steel: str = "#2563EB"          # Structural Steel Blue
+    concrete: str = "#0D9488"       # Concrete Jade / Teal
+    rebar: str = "#D97706"          # Rebar Warm Bronze / Amber
+    accent: str = "#0284C7"         # Technical Blue Accent
+    error: str = "#DC2626"          # Code Failure Red
+    success: str = "#16A34A"        # Code Pass Green
+    warning: str = "#D97706"        # Code Warning Amber
+    muted: str = "#94A3B8"          # Neutral Slate Gray
+    grid: str = "#E2E8F0"           # Subtle Grid Line
+    surface: str = "#FFFFFF"        # Chart Surface Background
 
 
 @dataclass(frozen=True)

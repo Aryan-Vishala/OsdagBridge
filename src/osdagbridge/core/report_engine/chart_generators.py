@@ -45,6 +45,7 @@ def generate_chart(
     safe_title = chart.title.replace(" ", "_").replace("/", "_")
     path = os.path.join(output_dir, f"{safe_title}.png")
 
+    palette = theme.colors
     chart_style = theme.charts.get("default", theme.charts["default"])
     width_cm = chart.width_cm if chart.width_cm is not None else chart_style.width_cm
     height_cm = chart.height_cm if chart.height_cm is not None else chart_style.height_cm
@@ -55,18 +56,18 @@ def generate_chart(
     
     fig, ax = plt.subplots(
         figsize=(width_cm / 2.54, height_cm / 2.54),
-        facecolor='#FFFFFF'
+        facecolor=palette.surface
     )
-    ax.set_facecolor('#FFFFFF')
+    ax.set_facecolor(palette.surface)
 
     # Spines styling
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#94A3B8')
+    ax.spines['left'].set_color(palette.muted)
     ax.spines['left'].set_linewidth(0.8)
-    ax.spines['bottom'].set_color('#94A3B8')
+    ax.spines['bottom'].set_color(palette.muted)
     ax.spines['bottom'].set_linewidth(0.8)
-    ax.tick_params(colors='#334155', labelsize=9)
+    ax.tick_params(colors=palette.secondary, labelsize=9)
 
     if chart.chart_type == "barh":
         # Horizontal bar chart for Utilization Ratio Summary (Chapter 5)
@@ -80,13 +81,13 @@ def generate_chart(
         colors = []
         for v in vals:
             if np.isnan(v):
-                colors.append('#94A3B8')  # Muted slate
+                colors.append(palette.muted)
             elif chart.threshold_line is not None and v > chart.threshold_line:
-                colors.append('#DC2626')  # Premium Crimson Red (FAIL)
+                colors.append(palette.error)
             else:
-                colors.append('#15803D')  # Rich Emerald Green (PASS)
+                colors.append(palette.success)
 
-        bars = ax.barh(keys, vals, color=colors, height=0.55, zorder=3, edgecolor='#FFFFFF', linewidth=1.0)
+        bars = ax.barh(keys, vals, color=colors, height=0.55, zorder=3, edgecolor=palette.surface, linewidth=1.0)
         
         # Add numeric labels and PASS/FAIL
         max_val = max([v for v in vals if not np.isnan(v)] + [1.0])
@@ -95,13 +96,13 @@ def generate_chart(
             if np.isnan(original_val):
                 ax.text(
                     0.03, y_pos, "N/A (Not Designed / Optional)",
-                    va='center', ha='left', color='#64748B',
+                    va='center', ha='left', color=palette.muted,
                     fontsize=9.5, fontstyle='italic', zorder=5
                 )
             else:
                 status = "FAIL" if (chart.threshold_line is not None and original_val > chart.threshold_line) else "PASS"
                 text = f"{original_val:.2f}  [{status}]"
-                color = '#DC2626' if status == "FAIL" else '#15803D'
+                color = palette.error if status == "FAIL" else palette.success
                 
                 # Position text nicely
                 x_pos = original_val + (max_val * 0.02)
@@ -112,7 +113,7 @@ def generate_chart(
                 )
 
         # Subtle vertical grid
-        ax.xaxis.grid(True, linestyle='--', color='#E2E8F0', linewidth=0.8, alpha=0.8, zorder=0)
+        ax.xaxis.grid(True, linestyle='--', color=palette.grid, linewidth=0.8, alpha=0.8, zorder=0)
         
         safe_max = max(max_val, chart.threshold_line if chart.threshold_line else 1.0)
         ax.set_xlim(0, safe_max * 1.25)
@@ -120,7 +121,7 @@ def generate_chart(
         if chart.threshold_line is not None:
             ax.axvline(
                 x=chart.threshold_line,
-                color='#DC2626',
+                color=palette.error,
                 linestyle='--',
                 linewidth=1.8,
                 zorder=4,
@@ -129,8 +130,8 @@ def generate_chart(
             ax.legend(
                 loc='lower right',
                 frameon=True,
-                facecolor='#FFFFFF',
-                edgecolor='#CBD5E1',
+                facecolor=palette.surface,
+                edgecolor=palette.grid,
                 fontsize=9.0,
                 title="Design Threshold",
                 title_fontsize=9.0
@@ -145,14 +146,14 @@ def generate_chart(
         if chart.colors and len(chart.colors) >= len(raw_keys):
             bar_colors = chart.colors[:len(raw_keys)]
         else:
-            default_palette = ['#1E40AF', '#0D9488', '#D97706', '#6366F1', '#475569']
+            default_palette = [palette.steel, palette.concrete, palette.rebar, palette.primary, palette.secondary]
             bar_colors = default_palette[:len(raw_keys)]
 
         bar_width = 0.45 if len(raw_keys) <= 3 else 0.6
-        bars = ax.bar(raw_keys, vals, color=bar_colors, width=bar_width, zorder=3, edgecolor='#FFFFFF', linewidth=1.2)
+        bars = ax.bar(raw_keys, vals, color=bar_colors, width=bar_width, zorder=3, edgecolor=palette.surface, linewidth=1.2)
         
         # Subtle horizontal grid
-        ax.yaxis.grid(True, linestyle='--', color='#E2E8F0', linewidth=0.8, alpha=0.8, zorder=0)
+        ax.yaxis.grid(True, linestyle='--', color=palette.grid, linewidth=0.8, alpha=0.8, zorder=0)
 
         # Calculate max value for nice y-limit headroom
         valid_vals = [v for v in vals if not np.isnan(v)]
@@ -166,7 +167,7 @@ def generate_chart(
             if np.isnan(original_val):
                 ax.text(
                     x_pos, 0.05 * max_y, "N/A",
-                    ha='center', va='bottom', color='#94A3B8',
+                    ha='center', va='bottom', color=palette.muted,
                     fontsize=9, fontstyle='italic', zorder=5
                 )
             else:
@@ -177,20 +178,20 @@ def generate_chart(
                 ax.text(
                     x_pos, original_val + (max_y * 0.02),
                     label_text,
-                    ha='center', va='bottom', color='#1E293B',
+                    ha='center', va='bottom', color=palette.secondary,
                     fontsize=9, fontweight='bold', zorder=5
                 )
 
         if chart.threshold_line is not None:
             ax.axhline(
                 y=chart.threshold_line,
-                color='#DC2626',
+                color=palette.error,
                 linestyle='--',
                 linewidth=1.8,
                 zorder=4,
                 label=f"Threshold={chart.threshold_line}",
             )
-            ax.legend(loc='upper right', frameon=True, facecolor='#FFFFFF', edgecolor='#CBD5E1', fontsize=8.5)
+            ax.legend(loc='upper right', frameon=True, facecolor=palette.surface, edgecolor=palette.grid, fontsize=8.5)
 
         # Keep labels horizontal if few bars; rotate only if many
         if len(raw_keys) > 3:
@@ -199,14 +200,18 @@ def generate_chart(
             plt.setp(ax.get_xticklabels(), rotation=0, ha="center", fontsize=9.5, fontweight='bold')
 
     if chart.x_label:
-        ax.set_xlabel(chart.x_label, fontsize=9.5, fontweight='bold', color='#1E293B', labelpad=8)
+        ax.set_xlabel(chart.x_label, fontsize=9.5, fontweight='bold', color=palette.secondary, labelpad=8)
     if chart.y_label:
-        ax.set_ylabel(chart.y_label, fontsize=9.5, fontweight='bold', color='#1E293B', labelpad=8)
+        ax.set_ylabel(chart.y_label, fontsize=9.5, fontweight='bold', color=palette.secondary, labelpad=8)
 
-    try:
-        plt.tight_layout()
-    except Exception:
-        pass
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            plt.tight_layout()
+        except Exception:
+            pass
+
     fig.savefig(path, dpi=chart_style.dpi, bbox_inches='tight')
     plt.close(fig)
 

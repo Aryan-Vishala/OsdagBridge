@@ -138,7 +138,7 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
             "End Diaphragms": ed_wt
         },
         y_label="Weight (MT)",
-        colors=["#1E3A8A", "#2563EB", "#60A5FA"],
+        colors=["#1E293B", "#2563EB", "#0284C7"],
         width_cm=14.5,
         height_cm=5.6,
     )
