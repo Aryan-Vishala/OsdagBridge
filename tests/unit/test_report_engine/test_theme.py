@@ -30,6 +30,8 @@ class TestTableStyle:
         ts = TableStyle()
         assert ts.column_padding_pt == 6
         assert ts.row_height_factor == 1.15
+        assert ts.inner_group_rule == "subtle"
+        assert ts.group_boundary_rule == "strong"
 
     def test_frozen(self):
         ts = TableStyle()

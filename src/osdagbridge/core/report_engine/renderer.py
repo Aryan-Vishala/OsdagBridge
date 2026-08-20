@@ -176,7 +176,7 @@ class LatexRenderer:
 
         col_spec = self._build_col_spec(table)
         header = self._build_header_row(table)
-        body = self._build_body(table)
+        body = self._build_body(table, ts)
 
         pre = r"\hline" if hints.keep_caption_with_table else ""
         
@@ -232,10 +232,10 @@ class LatexRenderer:
         cells = [r"\textbf{" + self._escape(c.header) + "}" for c in table.columns]
         return " & ".join(cells)
 
-    def _build_body(self, table: Table) -> str:
+    def _build_body(self, table: Table, ts: TableStyle | None = None) -> str:
         """Dispatch to flat or grouped row builders."""
         if table.groups is not None:
-            return self._build_grouped_body(table)
+            return self._build_grouped_body(table, ts)
         lines = []
         rows = table.rows or []
         n_cols = len(table.columns)
@@ -251,10 +251,13 @@ class LatexRenderer:
                 lines.append(r"\noalign{\penalty0}\hline")
         return "\n".join(lines)
 
-    def _build_grouped_body(self, table: Table) -> str:
-        """Build body for grouped tables, handling splittable vs non-splittable."""
+    def _build_grouped_body(self, table: Table, ts: TableStyle | None = None) -> str:
+        """Build body for grouped tables, handling splittable vs non-splittable with theme rules."""
         if not table.groups:
             return ""
+        if ts is None:
+            ts = self._theme.table_styles.get(table.layout.style, self._theme.table_styles["default"])
+
         lines = []
         is_splittable = table.layout.splittable
         n_cols = len(table.columns)
@@ -278,10 +281,20 @@ class LatexRenderer:
                 
                 cells.insert(0, first_cell)
                 lines.append(" & ".join(cells) + r" \\")
+
+                # Inner row separator within the same group
+                if row_idx < n_rows - 1:
+                    if ts.inner_group_rule == "subtle":
+                        lines.append(rf"\noalign{{\penalty0}}\cline{{2-{n_cols}}}")
+                    elif ts.inner_group_rule == "full":
+                        lines.append(r"\noalign{\penalty0}\hline")
             
-            # Add a full horizontal rule under the group label if this is not the last group
+            # Group boundary separator
             if group_idx < len(table.groups) - 1:
-                lines.append(r"\noalign{\penalty0}\hline")
+                if ts.group_boundary_rule == "strong":
+                    lines.append(r"\noalign{\penalty0}\hline")
+                elif ts.group_boundary_rule == "double":
+                    lines.append(r"\noalign{\penalty0}\hline\hline")
                 
         return "\n".join(lines)
 

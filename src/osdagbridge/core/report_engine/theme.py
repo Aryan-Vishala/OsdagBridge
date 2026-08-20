@@ -28,6 +28,8 @@ class TableStyle:
     header_bg_color: str = "lightgray"
     rule_width_pt: float = 0.5
     caption_spacing_pt: float = 6
+    inner_group_rule: str = "subtle"       # "subtle" (cline 2-N), "full" (hline), or "none"
+    group_boundary_rule: str = "strong"    # "strong" (hline), "double" (hline hline), or "none"
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,7 @@ from osdagbridge.core.report_engine.document import (
 from osdagbridge.core.report_engine.facts import CheckStatus, QuantityValue
 from osdagbridge.core.report_engine.layout import LayoutHints
 from osdagbridge.core.report_engine.renderer import LatexRenderer
-from osdagbridge.core.report_engine.theme import ReportTheme
+from osdagbridge.core.report_engine.theme import ReportTheme, TableStyle
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ class TestRenderTableGroup:
         assert "1600" in tex
 
     def test_cline_between_rows(self):
-        """No inner \\cline within a group (cleaner visual grouping)."""
+        """Inner \\cline within a group under subtle rule (default)."""
         t = Table(
             caption="Test",
             columns=[Column(""), Column("Param"), Column("Value")],
@@ -288,6 +288,20 @@ class TestRenderTableGroup:
             ],
         )
         tex = self.renderer._render_table(t)
+        assert r"\cline{2-3}" in tex
+
+    def test_no_cline_when_inner_rule_none(self):
+        """No inner \\cline when inner_group_rule is none."""
+        theme = ReportTheme(table_styles={"default": TableStyle(inner_group_rule="none")})
+        renderer = LatexRenderer(theme)
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            groups=[
+                TableGroup(label="G1", rows=[["A", "1"], ["B", "2"]]),
+            ],
+        )
+        tex = renderer._render_table(t)
         assert r"\cline{2-3}" not in tex
 
     def test_hline_between_groups(self):
