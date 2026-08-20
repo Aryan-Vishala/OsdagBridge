@@ -107,6 +107,7 @@ from . import (
     ComponentSummary,
     OverallSummaryData,
 )
+from osdagbridge.core.report_engine.provenance import ProvenanceTracker, ValueSource
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -225,20 +226,41 @@ def _girder_entries(input_dict: dict) -> list[tuple[str, str]]:
 
 
 def _build_section_properties(
-    od: dict, lbl: str
+    od: dict, lbl: str, tracker: Optional[ProvenanceTracker] = None
 ) -> GirderSectionProperties:
+    d_val = _get(od, KEY_SD_TOTAL_DEPTH)
+    tf_w_val = _get(od, KEY_SD_TOP_FLANGE_WIDTH)
+    bf_w_val = _get(od, KEY_SD_BOTTOM_FLANGE_WIDTH)
+    tf_t_val = _get(od, KEY_SD_TOP_FLANGE_THICKNESS)
+    bf_t_val = _get(od, KEY_SD_BOTTOM_FLANGE_THICKNESS)
+    w_t_val = _get(od, KEY_SD_WEB_THICKNESS)
+    area_val = _get(od, KEY_SD_SECTION_PROP_AREA)
+    iz_val = _get(od, KEY_SD_SECTION_PROP_IZ)
+    zz_val = _get(od, KEY_SD_SECTION_PROP_ZZ)
+    zuz_val = _get(od, KEY_SD_SECTION_PROP_ZUZ)
+
+    if tracker:
+        tracker.record(f"{lbl}.depth", ValueSource.OUTPUT_DICT, KEY_SD_TOTAL_DEPTH, d_val, _safe_float(d_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.top_flange_width", ValueSource.OUTPUT_DICT, KEY_SD_TOP_FLANGE_WIDTH, tf_w_val, _safe_float(tf_w_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.bottom_flange_width", ValueSource.OUTPUT_DICT, KEY_SD_BOTTOM_FLANGE_WIDTH, bf_w_val, _safe_float(bf_w_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.top_flange_thickness", ValueSource.OUTPUT_DICT, KEY_SD_TOP_FLANGE_THICKNESS, tf_t_val, _safe_float(tf_t_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.bottom_flange_thickness", ValueSource.OUTPUT_DICT, KEY_SD_BOTTOM_FLANGE_THICKNESS, bf_t_val, _safe_float(bf_t_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.web_thickness", ValueSource.OUTPUT_DICT, KEY_SD_WEB_THICKNESS, w_t_val, _safe_float(w_t_val), "mm", "mm", "none")
+        tracker.record(f"{lbl}.gross_area", ValueSource.OUTPUT_DICT, KEY_SD_SECTION_PROP_AREA, area_val, _safe_float(area_val), "cm²", "cm²", "none")
+        tracker.record(f"{lbl}.moment_of_inertia", ValueSource.OUTPUT_DICT, KEY_SD_SECTION_PROP_IZ, iz_val, _safe_float(iz_val), "cm⁴", "cm⁴", "none")
+
     return GirderSectionProperties(
         girder_label=lbl,
-        depth=_qv(_get(od, KEY_SD_TOTAL_DEPTH), "mm"),
-        top_flange_width=_qv(_get(od, KEY_SD_TOP_FLANGE_WIDTH), "mm"),
-        bottom_flange_width=_qv(_get(od, KEY_SD_BOTTOM_FLANGE_WIDTH), "mm"),
-        top_flange_thickness=_qv(_get(od, KEY_SD_TOP_FLANGE_THICKNESS), "mm"),
-        bottom_flange_thickness=_qv(_get(od, KEY_SD_BOTTOM_FLANGE_THICKNESS), "mm"),
-        web_thickness=_qv(_get(od, KEY_SD_WEB_THICKNESS), "mm"),
-        gross_area=_qv(_get(od, KEY_SD_SECTION_PROP_AREA), "cm\u00b2"),
-        moment_of_inertia=_qv(_get(od, KEY_SD_SECTION_PROP_IZ), "cm\u2074"),
-        elastic_section_modulus=_qv(_get(od, KEY_SD_SECTION_PROP_ZZ), "cm\u00b3"),
-        plastic_section_modulus=_qv(_get(od, KEY_SD_SECTION_PROP_ZUZ), "cm\u00b3"),
+        depth=_qv(d_val, "mm"),
+        top_flange_width=_qv(tf_w_val, "mm"),
+        bottom_flange_width=_qv(bf_w_val, "mm"),
+        top_flange_thickness=_qv(tf_t_val, "mm"),
+        bottom_flange_thickness=_qv(bf_t_val, "mm"),
+        web_thickness=_qv(w_t_val, "mm"),
+        gross_area=_qv(area_val, "cm\u00b2"),
+        moment_of_inertia=_qv(iz_val, "cm\u2074"),
+        elastic_section_modulus=_qv(zz_val, "cm\u00b3"),
+        plastic_section_modulus=_qv(zuz_val, "cm\u00b3"),
         effective_slab_width=_qv(_get(od, KEY_SD_EFFECTIVE_SLAB_WIDTH), "mm"),
         composite_iz=_qv(_get(od, KEY_SD_COMPOSITE_IZ), "cm\u2074"),
         pna_depth=_qv(_get(od, KEY_SD_PNA_DEPTH), "mm"),
@@ -267,12 +289,22 @@ def _build_classification(od: dict) -> GirderClassification:
 # ---------------------------------------------------------------------------
 
 
-def _build_flexure_check(od: dict) -> GirderFlexureCheck:
+def _build_flexure_check(
+    od: dict, lbl: str = "", tracker: Optional[ProvenanceTracker] = None
+) -> GirderFlexureCheck:
     ur_pct = _safe_float(_get(od, KEY_UTIL_FLEXURE))
     ur = ur_pct / 100.0 if ur_pct is not None else None
+    mu = _qv(_get(od, KEY_SD_MU_APPLIED), "kN-m")
+    md = _qv(_get(od, KEY_SD_MD_CAPACITY), "kN-m")
+
+    if tracker and lbl:
+        tracker.record(f"{lbl}.flexure.design_moment", ValueSource.OUTPUT_DICT, KEY_SD_MU_APPLIED, _get(od, KEY_SD_MU_APPLIED), mu.value if mu else None, "kN-m", "kN-m", "none")
+        tracker.record(f"{lbl}.flexure.moment_capacity", ValueSource.OUTPUT_DICT, KEY_SD_MD_CAPACITY, _get(od, KEY_SD_MD_CAPACITY), md.value if md else None, "kN-m", "kN-m", "none")
+        tracker.record(f"{lbl}.flexure.ur", ValueSource.OUTPUT_DICT, KEY_UTIL_FLEXURE, _get(od, KEY_UTIL_FLEXURE), ur, "%", "ratio", "ur_pct / 100")
+
     return GirderFlexureCheck(
-        mu_applied=_qv(_get(od, KEY_SD_MU_APPLIED), "kN-m"),
-        md_capacity=_qv(_get(od, KEY_SD_MD_CAPACITY), "kN-m"),
+        mu_applied=mu,
+        md_capacity=md,
         utilization_ratio=ur,
         status=_ur_status(ur),
     )
@@ -283,17 +315,27 @@ def _build_flexure_check(od: dict) -> GirderFlexureCheck:
 # ---------------------------------------------------------------------------
 
 
-def _build_shear_check(od: dict) -> GirderShearCheck:
+def _build_shear_check(
+    od: dict, lbl: str = "", tracker: Optional[ProvenanceTracker] = None
+) -> GirderShearCheck:
     ur_pct = _safe_float(_get(od, KEY_UTIL_SHEAR))
     ur = ur_pct / 100.0 if ur_pct is not None else None
+    vu = _qv(_get(od, KEY_SD_SHEAR_VU), "kN")
+    vc = _qv(_get(od, KEY_SD_SHEAR_VCR), "kN")
+
+    if tracker and lbl:
+        tracker.record(f"{lbl}.shear.design_shear", ValueSource.OUTPUT_DICT, KEY_SD_SHEAR_VU, _get(od, KEY_SD_SHEAR_VU), vu.value if vu else None, "kN", "kN", "none")
+        tracker.record(f"{lbl}.shear.shear_capacity", ValueSource.OUTPUT_DICT, KEY_SD_SHEAR_VCR, _get(od, KEY_SD_SHEAR_VCR), vc.value if vc else None, "kN", "kN", "none")
+        tracker.record(f"{lbl}.shear.ur", ValueSource.OUTPUT_DICT, KEY_UTIL_SHEAR, _get(od, KEY_UTIL_SHEAR), ur, "%", "ratio", "ur_pct / 100")
+
     return GirderShearCheck(
-        vu=_qv(_get(od, KEY_SD_SHEAR_VU), "kN"),
+        vu=vu,
         shear_av=_qv(_get(od, KEY_SD_SHEAR_AV), "mm\u00b2"),
         panel_cd=_safe_float(_get(od, KEY_SD_PANEL_CD)),
         shear_kv=_safe_float(_get(od, KEY_SD_SHEAR_KV)),
         shear_lambda_w=_safe_float(_get(od, KEY_SD_SHEAR_LAMBDA_W)),
         shear_tau_b=_qv(_get(od, KEY_SD_SHEAR_TAU_B), "MPa"),
-        shear_vcr=_qv(_get(od, KEY_SD_SHEAR_VCR), "kN"),
+        shear_vcr=vc,
         utilization_ratio=ur,
         status=_ur_status(ur),
     )
@@ -532,8 +574,9 @@ def _build_girder_summary(od: dict, gi: int) -> GirderDesignSummary:
 def build_girder_design_data(
     output_dict: dict,
     input_dict: dict,
+    tracker: Optional[ProvenanceTracker] = None,
 ) -> tuple[GirderDesignData, ...]:
-    """Extract girder design check data from output_dict + input_dict."""
+    """Extract girder design check data from output_dict + input_dict with provenance."""
     od = output_dict
     entries = _girder_entries(input_dict)
     is_custom = (
@@ -543,10 +586,10 @@ def build_girder_design_data(
 
     girders: list[GirderDesignData] = []
     for gi, (lbl, _mid) in enumerate(entries, start=1):
-        section_props = _build_section_properties(od, lbl)
+        section_props = _build_section_properties(od, lbl, tracker=tracker)
         classification = _build_classification(od)
-        flexure = _build_flexure_check(od)
-        shear = _build_shear_check(od)
+        flexure = _build_flexure_check(od, lbl, tracker=tracker)
+        shear = _build_shear_check(od, lbl, tracker=tracker)
         interaction = _build_interaction_check(od)
         ltb = _build_ltb_check(od)
         stiff_summary = _build_stiffener_summary(od)
@@ -684,8 +727,9 @@ def build_shear_connector_data(
 def build_deck_design_data(
     output_dict: dict,
     input_dict: dict,
+    tracker: Optional[ProvenanceTracker] = None,
 ) -> Optional[DeckDesignData]:
-    """Extract Deck Design data (Tables 5.17a-g)."""
+    """Extract Deck Design data (Tables 5.17a-g) with provenance."""
     from osdagbridge.core.utils import common as c
     
     deck_rpt = output_dict.get("deck_report_values", {}) or {}
@@ -697,6 +741,9 @@ def build_deck_design_data(
     def _dkv(key, default=0.0):
         v = deck_rpt.get(key)
         if v is None or v == "":
+            short_key = key.split(".")[-1]
+            v = deck_rpt.get(short_key)
+        if v is None or v == "":
             return default
         try:
             return float(v)
@@ -704,22 +751,42 @@ def build_deck_design_data(
             return default
 
     # --- Loading Geometry ---
+    fck_val = input_dict.get(c.KEY_MATERIAL_DECK_FCK)
+    if fck_val is None:
+        cg = str(input_dict.get(c.KEY_DECK_CONCRETE_GRADE_BASIC) or "")
+        if cg.startswith("M") and cg[1:].isdigit():
+            fck_val = float(cg[1:])
+    fctm_val = input_dict.get(c.KEY_MATERIAL_DECK_FCTM)
+    if fctm_val is None and fck_val is not None:
+        try:
+            fctm_val = round(0.259 * (float(fck_val) ** (2.0 / 3.0)), 2)
+        except Exception:
+            fctm_val = None
+
+    eff_span_val = _dkv(c.KEY_DD_SPAN)
+    deck_thk_val = _safe_float(input_dict.get(c.KEY_TS_DECK_THICKNESS))
+    dead_ld_val = _dkv(c.KEY_DD_WDL)
+    wheel_ld_val = _dkv(c.KEY_DD_WHEEL_LOAD)
+
     loading = DeckLoadingGeometry(
-        effective_span=_qv(_dkv(c.KEY_DD_SPAN), "m"),
-        thickness=_qv(_safe_float(input_dict.get(c.KEY_TS_DECK_THICKNESS)), "mm"),
+        effective_span=_qv(eff_span_val, "m"),
+        thickness=_qv(deck_thk_val, "mm"),
+        clear_cover_top=_qv(_safe_float(input_dict.get(c.KEY_DS_TOP_CLEAR_COVER)), "mm"),
+        clear_cover_bot=_qv(_safe_float(input_dict.get(c.KEY_DS_BOTTOM_CLEAR_COVER)), "mm"),
         concrete_grade=str(input_dict.get(c.KEY_DECK_CONCRETE_GRADE_BASIC) or ""),
-        fck=None, # chap5.py shows fck is derived inside IRC112, but we don't display it directly? Wait, legacy says `Concrete Grade: M40`. It doesn't show fck.
+        fck=_qv(fck_val, "MPa"),
+        fctm=_qv(fctm_val, "MPa"),
         reinf_grade=str(input_dict.get(c.KEY_DS_REINF_MATERIAL) or ""),
         fy=_qv(_dkv(c.KEY_DD_FY), "MPa"),
-        dead_load=_qv(_dkv(c.KEY_DD_WDL), "kN/m^2"),
-        wheel_load=_qv(_dkv(c.KEY_DD_WHEEL_LOAD), "kN"),
-        tyre_width=_qv(_dkv(c.KEY_DD_TYRE_WIDTH, 0.0) * 1000.0, "mm"),
-        impact_factor=_dkv(c.KEY_DD_IMPACT_FACTOR, 1.0) - 1.0, # 1 + IF is stored
-        vehicle=str(deck_rpt.get(c.KEY_DD_VEHICLE) or "")
+        dead_load=_qv(dead_ld_val, "kN/m²"),
+        wheel_load=_qv(wheel_ld_val, "kN"),
+        tyre_width=_qv(_dkv(c.KEY_DD_TYRE_WIDTH, 0.0) * 1000.0 if _dkv(c.KEY_DD_TYRE_WIDTH, 0.0) < 10 else _dkv(c.KEY_DD_TYRE_WIDTH, 0.0), "mm"),
+        impact_factor=_dkv(c.KEY_DD_IMPACT_FACTOR, 1.0) - 1.0,
+        vehicle=str(deck_rpt.get(c.KEY_DD_VEHICLE) or deck_rpt.get("vehicle") or "")
     )
     
     # --- Flexure Check ---
-    has_oh = bool(deck_rpt.get(c.KEY_DD_HAS_OVERHANG))
+    has_oh = bool(deck_rpt.get(c.KEY_DD_HAS_OVERHANG) or deck_rpt.get("has_overhang"))
     m_sag_dem = _dkv(c.KEY_DD_M_ULS_SAG)
     m_sag_cap = _dkv(c.KEY_DD_MU_BOT)
     sag_status = CheckStatus.PASS if m_sag_cap >= m_sag_dem else CheckStatus.FAIL
@@ -735,17 +802,25 @@ def build_deck_design_data(
         oh_status = CheckStatus.PASS if oh_cap >= oh_dem else CheckStatus.FAIL
 
     flexure = DeckFlexureCheck(
-        demand_sagging=_qv(m_sag_dem, "kNm/m"),
-        capacity_sagging=_qv(m_sag_cap, "kNm/m"),
+        m_dl_sag=_qv(_dkv(c.KEY_DD_M_DL), "kN-m/m"),
+        m_ll_sag=_qv(_dkv(c.KEY_DD_M_LL), "kN-m/m"),
+        gamma_dl=_dkv(c.KEY_DD_GAMMA_DL, 1.35),
+        gamma_ll=_dkv(c.KEY_DD_GAMMA_LL, 1.50),
+        demand_sagging=_qv(m_sag_dem, "kN-m/m"),
+        d_bot=_qv(_dkv(c.KEY_DD_D_BOT), "mm"),
+        capacity_sagging=_qv(m_sag_cap, "kN-m/m"),
         status_sagging=sag_status,
-        demand_hogging=_qv(m_hog_dem, "kNm/m"),
-        required_top_steel=_qv(_dkv(c.KEY_DD_AS_REQ_TOP), "mm^2/m"),
-        capacity_hogging=_qv(m_hog_cap, "kNm/m"),
+        demand_hogging=_qv(m_hog_dem, "kN-m/m"),
+        required_top_steel=_qv(_dkv(c.KEY_DD_AS_REQ_TOP), "mm²/m"),
+        capacity_hogging=_qv(m_hog_cap, "kN-m/m"),
         status_hogging=hog_status,
         has_overhang=has_oh,
-        overhang_length=_qv(_safe_float(input_dict.get(c.KEY_TS_DECK_OVERHANG)), "mm"),
-        demand_overhang=_qv(oh_dem, "kNm/m"),
-        capacity_overhang=_qv(oh_cap, "kNm/m"),
+        overhang_length=_qv(_safe_float(input_dict.get(c.KEY_TS_DECK_OVERHANG)), "m"),
+        m_barrier=_qv(_dkv(c.KEY_DD_M_BARRIER), "kN-m/m") if has_oh else None,
+        m_dl_oh=_qv(_dkv(c.KEY_DD_M_DL_OH), "kN-m/m") if has_oh else None,
+        m_ll_oh=_qv(_dkv(c.KEY_DD_M_LL_OH), "kN-m/m") if has_oh else None,
+        demand_overhang=_qv(oh_dem, "kN-m/m"),
+        capacity_overhang=_qv(oh_cap, "kN-m/m"),
         status_overhang=oh_status
     )
     
@@ -753,27 +828,33 @@ def build_deck_design_data(
     punch_vrdc = _dkv(c.KEY_DD_VRD_C_MPA)
     punch_ved = _dkv(c.KEY_DD_PUNCH_VED)
     punch_ur = punch_ved / punch_vrdc if punch_vrdc > 0 else None
-    punch_ok = deck_rpt.get(c.KEY_DD_PUNCH_OK)
+    punch_ok = deck_rpt.get(c.KEY_DD_PUNCH_OK) or deck_rpt.get("punch_ok")
     punch_status = CheckStatus.PASS if punch_ok else CheckStatus.FAIL
     
     ow_ved = _dkv(c.KEY_DD_SHEAR_VED)
     ow_vrdc = _dkv(c.KEY_DD_SHEAR_VRDC)
     ow_ur = ow_ved / ow_vrdc if ow_vrdc > 0 else None
-    ow_ok = deck_rpt.get(c.KEY_DD_SHEAR_OK)
+    ow_ok = deck_rpt.get(c.KEY_DD_SHEAR_OK) or deck_rpt.get("shear_ok")
     ow_status = CheckStatus.PASS if ow_ok else CheckStatus.FAIL
     
-    d_bot = _dkv(c.KEY_DD_D_BOT)
-    k_factor = min(1.0 + (200.0 / d_bot)**0.5, 2.0) if d_bot > 0 else 0.0
-    as_bot = _dkv(c.KEY_DD_AS_BOT)
-    rho_l = min(as_bot / (1000.0 * d_bot), 0.02) if d_bot > 0 else 0.0
+    d_bot_val = _dkv(c.KEY_DD_D_BOT)
+    k_factor = min(1.0 + (200.0 / d_bot_val)**0.5, 2.0) if d_bot_val > 0 else 0.0
+    as_bot_val = _dkv(c.KEY_DD_AS_BOT)
+    rho_l = min(as_bot_val / (1000.0 * d_bot_val), 0.02) if d_bot_val > 0 else 0.0
     
     shear = DeckShearCheck(
         punching_ved_kn=_qv(_dkv(c.KEY_DD_PUNCH_VED_KN), "kN"),
+        tyre_length=_qv(_dkv(c.KEY_DD_TYRE_LENGTH), "mm"),
+        tyre_width=_qv(_dkv(c.KEY_DD_TYRE_WIDTH, 0.0) * 1000.0 if _dkv(c.KEY_DD_TYRE_WIDTH, 0.0) < 10 else _dkv(c.KEY_DD_TYRE_WIDTH, 0.0), "mm"),
+        punching_c1=_qv(_dkv(c.KEY_DD_PUNCH_C1), "mm"),
+        punching_c2=_qv(_dkv(c.KEY_DD_PUNCH_C2), "mm"),
+        punching_u1=_qv(_dkv(c.KEY_DD_PUNCH_U1), "mm"),
         punching_ved_mpa=_qv(punch_ved, "MPa"),
         punching_vrdc_mpa=_qv(punch_vrdc, "MPa"),
         punching_ur=punch_ur,
         punching_status=punch_status,
         oneway_ved=_qv(ow_ved, "kN/m"),
+        d_bot=_qv(d_bot_val, "mm"),
         oneway_size_factor_k=k_factor,
         oneway_rho_l=rho_l,
         oneway_vrdc=_qv(ow_vrdc, "kN/m"),
@@ -790,6 +871,10 @@ def build_deck_design_data(
     wk_status = CheckStatus.PASS if gov_wk <= wk_lim else CheckStatus.FAIL
     
     crack_width = DeckCrackWidthCheck(
+        as_min=_qv(_dkv(c.KEY_DD_AS_MIN), "mm²/m"),
+        dia_bot=_qv(_dkv(c.KEY_DD_DIA_BOT), "mm"),
+        spc_bot=_qv(_dkv(c.KEY_DD_SPC_BOT), "mm"),
+        as_bot=_qv(_dkv(c.KEY_DD_AS_BOT), "mm²/m"),
         calculated=_qv(gov_wk, "mm"),
         limit=_qv(wk_lim, "mm"),
         status=wk_status
@@ -799,22 +884,43 @@ def build_deck_design_data(
     as_req_bot = _dkv(c.KEY_DD_AS_REQ_BOT)
     as_req_top = _dkv(c.KEY_DD_AS_REQ_TOP)
     as_min = _dkv(c.KEY_DD_AS_MIN)
-    req_dist = max(0.20 * as_bot, as_min)
+    req_dist = max(0.20 * as_bot_val, as_min)
     
     as_prov_top = _dkv(c.KEY_DD_AS_TOP)
     as_prov_dist = _dkv(c.KEY_DD_AS_LONG)
     
     detailing = DeckDetailingCheck(
-        required_bottom=_qv(as_req_bot, "mm^2/m"),
-        provided_bottom=_qv(as_bot, "mm^2/m"),
-        required_top=_qv(as_req_top, "mm^2/m"),
-        provided_top=_qv(as_prov_top, "mm^2/m"),
-        required_dist=_qv(req_dist, "mm^2/m"),
-        provided_dist=_qv(as_prov_dist, "mm^2/m"),
-        status_bottom=CheckStatus.PASS if as_bot >= as_req_bot else CheckStatus.FAIL,
+        required_bottom=_qv(as_req_bot, "mm²/m"),
+        provided_bottom=_qv(as_bot_val, "mm²/m"),
+        dia_bot=_qv(_dkv(c.KEY_DD_DIA_BOT), "mm"),
+        spc_bot=_qv(_dkv(c.KEY_DD_SPC_BOT), "mm"),
+        as_min=_qv(as_min, "mm²/m"),
+        spc_max=_qv(_dkv(c.KEY_DD_SPACING_MAX), "mm"),
+        required_dist=_qv(req_dist, "mm²/m"),
+        provided_dist=_qv(as_prov_dist, "mm²/m"),
+        required_top=_qv(as_req_top, "mm²/m"),
+        provided_top=_qv(as_prov_top, "mm²/m"),
+        min_cover=_qv(_dkv(c.KEY_DD_MIN_COVER), "mm"),
+        top_cover=_qv(_safe_float(input_dict.get(c.KEY_DS_TOP_CLEAR_COVER)), "mm"),
+        bot_cover=_qv(_safe_float(input_dict.get(c.KEY_DS_BOTTOM_CLEAR_COVER)), "mm"),
+        status_bottom=CheckStatus.PASS if as_bot_val >= as_req_bot else CheckStatus.FAIL,
+        status_dist=CheckStatus.PASS if as_prov_dist >= req_dist else CheckStatus.FAIL,
         status_top=CheckStatus.PASS if as_prov_top >= as_req_top else CheckStatus.FAIL,
-        status_dist=CheckStatus.PASS if as_prov_dist >= req_dist else CheckStatus.FAIL
+        status_cover=CheckStatus.PASS if (deck_rpt.get(c.KEY_DD_COVER_OK) or deck_rpt.get("cover_ok")) else CheckStatus.FAIL
     )
+    
+    if tracker:
+        tracker.record("deck.thickness", ValueSource.INPUT_DICT, c.KEY_TS_DECK_THICKNESS, input_dict.get(c.KEY_TS_DECK_THICKNESS), deck_thk_val, "mm", "mm", "none")
+        tracker.record("deck.loading.dead_load", ValueSource.OUTPUT_DICT, c.KEY_DD_WDL, deck_rpt.get(c.KEY_DD_WDL), dead_ld_val, "kN/m²", "kN/m²", "none")
+        tracker.record("deck.loading.wheel_load", ValueSource.OUTPUT_DICT, c.KEY_DD_WHEEL_LOAD, deck_rpt.get(c.KEY_DD_WHEEL_LOAD), wheel_ld_val, "kN", "kN", "none")
+        tracker.record("deck.flexure.interior_moment_sag", ValueSource.OUTPUT_DICT, c.KEY_DD_M_ULS_SAG, deck_rpt.get(c.KEY_DD_M_ULS_SAG), m_sag_dem, "kN-m/m", "kN-m/m", "none")
+        tracker.record("deck.flexure.interior_moment_capacity", ValueSource.OUTPUT_DICT, c.KEY_DD_MU_BOT, deck_rpt.get(c.KEY_DD_MU_BOT), m_sag_cap, "kN-m/m", "kN-m/m", "none")
+        tracker.record("deck.punching.wheel_load", ValueSource.OUTPUT_DICT, c.KEY_DD_PUNCH_VED_KN, deck_rpt.get(c.KEY_DD_PUNCH_VED_KN), _dkv(c.KEY_DD_PUNCH_VED_KN), "kN", "kN", "none")
+        tracker.record("deck.punching.punch_vrdc_mpa", ValueSource.OUTPUT_DICT, c.KEY_DD_VRD_C_MPA, deck_rpt.get(c.KEY_DD_VRD_C_MPA), punch_vrdc, "MPa", "MPa", "none")
+        tracker.record("deck.crack_width.calculated_width", ValueSource.OUTPUT_DICT, c.KEY_DD_WK_BOT, gov_wk, gov_wk, "mm", "mm", "max(wk_bot, wk_top)")
+        tracker.record("deck.crack_width.permissible_width", ValueSource.OUTPUT_DICT, c.KEY_DD_WK_LIMIT, deck_rpt.get(c.KEY_DD_WK_LIMIT), wk_lim, "mm", "mm", "none")
+        tracker.record("deck.oneway_shear.ved", ValueSource.OUTPUT_DICT, c.KEY_DD_SHEAR_VED, deck_rpt.get(c.KEY_DD_SHEAR_VED), ow_ved, "kN/m", "kN/m", "none")
+        tracker.record("deck.oneway_shear.vrdc", ValueSource.OUTPUT_DICT, c.KEY_DD_SHEAR_VRDC, deck_rpt.get(c.KEY_DD_SHEAR_VRDC), ow_vrdc, "kN/m", "kN/m", "none")
     
     return DeckDesignData(
         is_designed=True,
@@ -825,7 +931,17 @@ def build_deck_design_data(
         detailing=detailing
     )
 
-def _build_panel_data(pair: str, forces: dict, designs: dict) -> BracingPanelData:
+def _build_panel_data(
+    pair: str,
+    forces: dict,
+    designs: dict,
+    output_dict: dict = None,
+    tracker: Optional[ProvenanceTracker] = None,
+) -> BracingPanelData:
+    od = output_dict or {}
+    geom = (od.get("crossbracing_forces_dict") or {}).get("geometry") or {}
+    pair_id = pair.replace("-", "")
+
     def build_member(member: str, force_type: str) -> BracingMemberCheck | None:
         pfx = "diag" if member == "diagonal" else "chord"
         key = f"{pfx}_{force_type}_kN"
@@ -863,6 +979,68 @@ def _build_panel_data(pair: str, forces: dict, designs: dict) -> BracingPanelDat
         except (TypeError, ValueError):
             ur = None
             status = CheckStatus.UNAVAILABLE
+
+        # Extract area (cm² -> mm²) and rmin (cm -> mm) from output_dict
+        sec_pfx = f"transverse_member_design.cb.section_properties.bracing.{pair_id}" if member == "diagonal" else f"transverse_member_design.cb.section_properties.top_chord.{pair_id}"
+        area_cm2 = od.get(f"{sec_pfx}.A")
+        rv_cm = od.get(f"{sec_pfx}.rv")
+        gross_area = QuantityValue(value=float(area_cm2) * 100.0, unit="mm\u00b2") if area_cm2 is not None else None
+        rmin = QuantityValue(value=float(rv_cm) * 10.0, unit="mm") if rv_cm is not None else None
+
+        # Effective length KL (m -> mm)
+        if member == "diagonal":
+            L_m = geom.get("diagonal_length_m", 0)
+        else:
+            L_m = geom.get("horiz_proj_m", 0)
+        eff_len = QuantityValue(value=float(L_m) * 1000.0, unit="mm") if L_m else None
+
+        # Slenderness KL/r and limit (400 for tension chord, 250 for compression chord / diagonal)
+        slnd = _safe_float(osdag.get("slenderness"))
+        slnd_lim = 400.0 if (member == "chord" and force_type == "tension") else 250.0
+
+        if tracker:
+            if area_cm2 is not None:
+                tracker.record(
+                    fact_name=f"cross_bracing.{pair}.{member}.{force_type}.gross_area",
+                    source=ValueSource.OUTPUT_DICT,
+                    source_key=f"{sec_pfx}.A",
+                    source_value=area_cm2,
+                    extracted_value=gross_area.value if gross_area else None,
+                    source_unit="cm²",
+                    target_unit="mm²",
+                    transform="cm² -> mm² (x 100)",
+                )
+            if rv_cm is not None:
+                tracker.record(
+                    fact_name=f"cross_bracing.{pair}.{member}.{force_type}.rmin",
+                    source=ValueSource.OUTPUT_DICT,
+                    source_key=f"{sec_pfx}.rv",
+                    source_value=rv_cm,
+                    extracted_value=rmin.value if rmin else None,
+                    source_unit="cm",
+                    target_unit="mm",
+                    transform="cm -> mm (x 10)",
+                )
+            if dem_val and dem_val.value is not None:
+                tracker.record(
+                    fact_name=f"cross_bracing.{pair}.{member}.{force_type}.demand",
+                    source=ValueSource.OUTPUT_DICT,
+                    source_key=key,
+                    source_value=forces.get(key),
+                    extracted_value=dem_val.value,
+                    target_unit="kN",
+                    transform="none",
+                )
+            if cap_val and cap_val.value is not None:
+                tracker.record(
+                    fact_name=f"cross_bracing.{pair}.{member}.{force_type}.capacity",
+                    source=ValueSource.OUTPUT_DICT,
+                    source_key=_first("Member.tension_capacity", "Design.Strength") or "capacity",
+                    source_value=osdag.get("capacity_kN"),
+                    extracted_value=cap_val.value,
+                    target_unit="kN",
+                    transform="none",
+                )
             
         return BracingMemberCheck(
             demand=dem_val,
@@ -872,25 +1050,24 @@ def _build_panel_data(pair: str, forces: dict, designs: dict) -> BracingPanelDat
             governing_lc=str(gov_lc) if gov_lc else None,
             connection_type=str(osdag.get("connection")) if osdag.get("connection") else None,
             section=str(osdag.get("section")) if osdag.get("section") else None,
+            gross_area=gross_area,
+            rmin=rmin,
+            effective_length=eff_len,
+            slenderness=slnd,
+            slenderness_limit=slnd_lim,
         )
 
     max_s_ur = None
     for member in ("diagonal", "chord"):
-        lim = 400.0 if member == "chord" else 250.0
         for ft in ("compression", "tension"):
-            mem_designs = designs.get(member) or {}
-            raw_design = mem_designs.get(ft) or {}
-            s = raw_design.get("Member.Slenderness")
-            if s is not None:
-                try:
-                    ratio = float(s) / lim
-                    if max_s_ur is None or ratio > max_s_ur:
-                        max_s_ur = ratio
-                except (TypeError, ValueError):
-                    pass
-    
-    s_ur = max_s_ur
-    s_status = CheckStatus.PASS if s_ur is not None and s_ur <= 1.0 else (CheckStatus.FAIL if s_ur is not None else CheckStatus.UNAVAILABLE)
+            m = build_member(member, ft)
+            if m and m.slenderness is not None and m.slenderness_limit:
+                r = m.slenderness / m.slenderness_limit
+                if max_s_ur is None or r > max_s_ur:
+                    max_s_ur = r
+
+    s_status = CheckStatus.PASS if (max_s_ur is not None and max_s_ur <= 1.0) else (CheckStatus.FAIL if max_s_ur is not None else CheckStatus.UNAVAILABLE)
+    s_ur = max_s_ur if max_s_ur is not None else None
 
     return BracingPanelData(
         pair_label=pair,
@@ -902,7 +1079,9 @@ def _build_panel_data(pair: str, forces: dict, designs: dict) -> BracingPanelDat
         slenderness_status=s_status,
     )
 
-def build_cross_bracing_data(output_dict: dict) -> CrossBracingData | None:
+def build_cross_bracing_data(
+    output_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> CrossBracingData | None:
     forces_dict = output_dict.get("crossbracing_forces_dict") or {}
     designs_dict = output_dict.get("crossbracing_design_results") or {}
     
@@ -914,11 +1093,14 @@ def build_cross_bracing_data(output_dict: dict) -> CrossBracingData | None:
     for pair_name in sorted(pairs_data.keys()):
         pair_forces = pairs_data[pair_name]
         pair_designs = designs_dict.get(pair_name) or {}
-        panels.append(_build_panel_data(pair_name, pair_forces, pair_designs))
+        panels.append(_build_panel_data(pair_name, pair_forces, pair_designs, output_dict, tracker=tracker))
         
     return CrossBracingData(panels=tuple(panels))
 
-def build_end_diaphragm_data(output_dict: dict, input_dict: dict) -> EndDiaphragmData | None:
+
+def build_end_diaphragm_data(
+    output_dict: dict, input_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> EndDiaphragmData | None:
     ed_type = ""
     for k, v in input_dict.items():
         if str(k).startswith(c.KEY_MP_ED_TYPE) and v:
@@ -936,7 +1118,7 @@ def build_end_diaphragm_data(output_dict: dict, input_dict: dict) -> EndDiaphrag
         for pair_name in sorted(pairs_data.keys()):
             pair_forces = pairs_data[pair_name]
             pair_designs = designs_dict.get(pair_name) or {}
-            panels.append(_build_panel_data(pair_name, pair_forces, pair_designs))
+            panels.append(_build_panel_data(pair_name, pair_forces, pair_designs, output_dict, tracker=tracker))
             
     return EndDiaphragmData(
         diaphragm_type=ed_type if ed_type else None,
@@ -1037,18 +1219,19 @@ def build_overall_summary_data(
 
     # --- Deck Summary ---
     def _dkv(k):
-        dd = output_dict.get("deck_design_results") or {}
+        dd = output_dict.get("deck_report_values") or output_dict.get("deck_design_results") or {}
         try:
             return float(dd.get(k, 0))
         except (TypeError, ValueError):
             return 0.0
             
-    _dk_has = bool(output_dict.get("deck_design_results"))
+    _dk_has = bool(output_dict.get("deck_report_values") or output_dict.get("deck_design_results"))
     def _deck_row(label, dem_key, cap_key, unit, is_oh=False):
         if not _dk_has:
             return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
         
-        _dk_oh = bool(output_dict.get("deck_design_results", {}).get(c.KEY_DD_M_ULS_OH))
+        dd_dict = output_dict.get("deck_report_values") or output_dict.get("deck_design_results") or {}
+        _dk_oh = bool(dd_dict.get(c.KEY_DD_M_ULS_OH))
         if is_oh and not _dk_oh:
              return SummaryCheckRecord(label, None, None, None, CheckStatus.UNAVAILABLE, None)
              
@@ -1193,13 +1376,14 @@ def build_overall_summary_data(
 def build_design_check_data(
     output_dict: dict,
     input_dict: dict,
+    tracker: Optional[ProvenanceTracker] = None,
 ) -> DesignCheckData:
-    """Build the complete DesignCheckData hierarchy."""
-    girders = build_girder_design_data(output_dict, input_dict)
+    """Build the complete DesignCheckData hierarchy with provenance."""
+    girders = build_girder_design_data(output_dict, input_dict, tracker=tracker)
     sc_data = build_shear_connector_data(output_dict, input_dict)
-    dk_data = build_deck_design_data(output_dict, input_dict)
-    cb_data = build_cross_bracing_data(output_dict)
-    ed_data = build_end_diaphragm_data(output_dict, input_dict)
+    dk_data = build_deck_design_data(output_dict, input_dict, tracker=tracker)
+    cb_data = build_cross_bracing_data(output_dict, tracker=tracker)
+    ed_data = build_end_diaphragm_data(output_dict, input_dict, tracker=tracker)
     summary_data = build_overall_summary_data(girders, dk_data, cb_data, ed_data, output_dict)
     
     return DesignCheckData(

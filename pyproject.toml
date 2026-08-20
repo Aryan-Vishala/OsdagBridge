@@ -85,3 +85,9 @@ where = ["src"]
 [project.scripts]
 osdagbridge-cli = "osdagbridge.cli.__main__:main"
 osdagbridge = "osdagbridge.desktop.__main__:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+

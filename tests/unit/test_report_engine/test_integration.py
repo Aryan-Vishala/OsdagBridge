@@ -95,26 +95,15 @@ class TestFullPipeline:
         assert r"\chapter{Loads and Load Combinations}" in latex
         assert r"\chapter{Design Checks}" in latex
         assert r"\chapter{Material Take-off" in latex
-        assert "Project location table here" in latex
+        assert "Project Location" in latex
         # Ch3 is migrated: assert actual semantic output
         assert "Dead Load -- Self Weight" in latex
-        assert "Live Loads (LL)" in latex
+        assert "Vehicle Live Loads" in latex
         assert "Load Combinations" in latex
         assert "Flexure check table here" in latex
-        assert "Table 7.1" in latex
+        assert "Bill of Materials" in latex
 
-    @patch("osdagbridge.core.reports.chap2.ch2_input_parameters")
-    def test_minimal_pipeline_always_has_ch2_ch7(self, mock_ch2):
-        mock_ch2.return_value = (
-            r"\chapter{Input Parameters}"
-            r"\begin{table}[H]"
-            r"\caption{\textbf{Project Location}}"
-            r"\begin{tabular}{...}"
-            r"\end{tabular}"
-            r"\end{table}"
-            r"Minimal ch2"
-        )
-    
+    def test_minimal_pipeline_always_has_ch2_ch7(self):
         facts = ReportFacts(
             metadata=FactMetadata(
                 project_name="Minimal Bridge",
@@ -133,8 +122,8 @@ class TestFullPipeline:
     
         renderer = LatexRenderer(ReportTheme())
         latex = renderer.render(doc)
-        assert "Minimal ch2" in latex
-        assert "Table 7.1" in latex
+        assert "Project Location" in latex
+        assert "Bill of Materials" in latex
 
     def test_no_raw_input_produces_empty_document(self):
         facts = ReportFacts(

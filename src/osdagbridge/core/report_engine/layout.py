@@ -20,3 +20,5 @@ class LayoutHints:
     splittable: bool = True
     repeat_header: bool = True
     space_after_mm: float = 4.0
+    style: str = "default"
+    orientation: str = "portrait"

@@ -29,7 +29,7 @@ class TestTableStyle:
     def test_defaults(self):
         ts = TableStyle()
         assert ts.column_padding_pt == 6
-        assert ts.row_height_pt == 14
+        assert ts.row_height_factor == 1.15
 
     def test_frozen(self):
         ts = TableStyle()
@@ -56,7 +56,7 @@ class TestReportTheme:
         theme = ReportTheme()
         assert isinstance(theme.page, PageGeometry)
         assert "default" in theme.table_styles
-        assert isinstance(theme.chart, ChartStyle)
+        assert isinstance(theme.charts["default"], ChartStyle)
         assert isinstance(theme.typography, TypographyStyle)
         assert isinstance(theme.colors, ColorPalette)
 

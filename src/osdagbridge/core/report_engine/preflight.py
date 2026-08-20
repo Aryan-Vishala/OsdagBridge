@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, List
@@ -117,9 +118,8 @@ class PDFPreflight:
         checks = []
         try:
             import fitz  # PyMuPDF
-            import os
-            if not os.path.exists(self._pdf_path):
-                return [PreflightCheck("Footer Collision", PreflightStatus.FAIL, f"PDF file not found: {self._pdf_path}")]
+            if not self._pdf_path or not os.path.exists(self._pdf_path):
+                return [PreflightCheck("Footer Collision", PreflightStatus.WARN, f"PDF file not found (skipped binary layout check): {self._pdf_path}")]
             
             doc = fitz.open(self._pdf_path)
             

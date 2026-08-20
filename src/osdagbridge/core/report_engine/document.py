@@ -6,12 +6,21 @@
 # =============================================================================
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Any, Union
 
 from .layout import LayoutHints
 
 # Union of all renderable component types.
-DocumentComponent = Union["Table", "Chart", "Figure", "Callout", "RawLatex"]
+DocumentComponent = Union["Table", "Chart", "Figure", "Callout", "Paragraph", "RawLatex"]
+
+
+@dataclass(frozen=True)
+class Math:
+    """Represents unescaped mathematical content (e.g. subscripts) in table cells.
+    
+    The renderer will output this wrapped in $...$ without escaping the content.
+    """
+    content: str
 
 
 @dataclass(frozen=True)
@@ -33,7 +42,7 @@ class TableGroup:
     """
 
     label: str
-    rows: List[List[str]]
+    rows: List[List[Any]]
 
 
 @dataclass
@@ -47,10 +56,11 @@ class Table:
 
     caption: str
     columns: List[Column]
-    rows: Optional[List[List[str]]] = None
+    rows: Optional[List[List[Any]]] = None
     groups: Optional[List[TableGroup]] = None
     layout: LayoutHints = field(default_factory=LayoutHints)
     label: str = ""
+    note: str = ""
 
 
 @dataclass
@@ -63,11 +73,14 @@ class Chart:
     """
 
     title: str
-    chart_type: str  # "bar", "grouped_bar"
+    chart_type: str  # "bar", "grouped_bar", "barh"
     data: dict
     x_label: str = ""
     y_label: str = ""
     threshold_line: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
+    colors: Optional[List[str]] = None
     layout: LayoutHints = field(default_factory=LayoutHints)
 
 
@@ -85,8 +98,16 @@ class Figure:
 class Callout:
     """A note, warning, or info box."""
 
-    text: str
+    text: Union[str, List[Any]]
     callout_type: str = "note"  # "note", "warning", "info"
+    layout: LayoutHints = field(default_factory=LayoutHints)
+
+
+@dataclass
+class Paragraph:
+    """A standard prose paragraph."""
+
+    text: Union[str, List[Any]]
     layout: LayoutHints = field(default_factory=LayoutHints)
 
 
@@ -108,6 +129,7 @@ class Section:
     title: str
     level: int = 2
     components: List[DocumentComponent] = field(default_factory=list)
+    layout: LayoutHints = field(default_factory=LayoutHints)
 
 
 @dataclass

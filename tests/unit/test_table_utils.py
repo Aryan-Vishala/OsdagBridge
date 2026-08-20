@@ -14,7 +14,7 @@ BODY = "\n".join([
 
 LEGACY_FIRST_HEAD = "\n".join([
     r"\begin{longtable}{|L{5.5cm}|p{10.0cm}|}",
-    r"\caption{\textbf{Dead Load -- Self Weight}}",
+    r"\caption{\textbf{Dead Load -- Self Weight}} \\",
     r"\hline",
     r"\textbf{parameter} & \textbf{value} \\",
     r"\hline",
@@ -73,11 +73,11 @@ def test_repeat_header_defaults_and_override():
     _, repeat_head, _ = _regions(out)
     assert repeat_head.strip("\n") == "\n".join([r"\hline", HEADER_ROW_LINE, r"\hline"])
 
-    custom = r"\textbf{parameter} & \textbf{value} (continued)"
-    out2 = _dead_load_table(repeat_header=custom)
+    custom = "\n".join([r"\multicolumn{2}{c}{\textit{Custom (continued)}} \\", r"\hline", HEADER_ROW_LINE, r"\hline"])
+    out2 = _dead_load_table(repeat_header=r"\multicolumn{2}{c}{\textit{Custom (continued)}} \\")
     _, repeat_head2, _ = _regions(out2)
     assert repeat_head2.strip("\n") == custom
-    assert out2.count(HEADER_ROW_LINE) == 1
+    assert out2.count(HEADER_ROW_LINE) == 2
 
 
 def test_multi_row_header():

@@ -66,6 +66,32 @@ from .theme import (
 from .renderer import LatexRenderer
 from .preflight import PDFPreflight, PreflightReport, PreflightStatus
 from .document_builder import build_report_document
+from .manifest import (
+    ChapterManifest,
+    ChapterParity,
+    ParityItem,
+    ParityReport,
+    ParityStatus,
+    ReportManifest,
+    SectionManifest,
+    TableManifest,
+    compare_manifests,
+    extract_legacy_manifest,
+    extract_legacy_manifest_from_payload,
+    extract_semantic_manifest,
+)
+from .provenance import (
+    FactProvenance,
+    ProvenanceTracker,
+    ProvenanceValidationIssue,
+    ValueSource,
+)
+from .validation import (
+    ValidationIssue,
+    ValidationReport,
+    validate_facts,
+    validate_payload,
+)
 
 __all__ = [
     # Facts
@@ -115,4 +141,27 @@ __all__ = [
     "PreflightStatus",
     # Builder
     "build_report_document",
+    # Manifest
+    "ParityStatus",
+    "TableManifest",
+    "SectionManifest",
+    "ChapterManifest",
+    "ReportManifest",
+    "ParityItem",
+    "ChapterParity",
+    "ParityReport",
+    "extract_semantic_manifest",
+    "extract_legacy_manifest",
+    "extract_legacy_manifest_from_payload",
+    "compare_manifests",
+    # Provenance
+    "ValueSource",
+    "FactProvenance",
+    "ProvenanceValidationIssue",
+    "ProvenanceTracker",
+    # Validation
+    "ValidationIssue",
+    "ValidationReport",
+    "validate_payload",
+    "validate_facts",
 ]

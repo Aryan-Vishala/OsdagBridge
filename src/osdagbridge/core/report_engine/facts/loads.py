@@ -9,6 +9,7 @@
 # =============================================================================
 
 from typing import Optional
+from osdagbridge.core.report_engine.provenance import ProvenanceTracker, ValueSource
 
 from . import (
     DeadLoadFact,
@@ -35,26 +36,48 @@ def _qv(value, unit: str = "") -> QuantityValue:
         return QuantityValue(None, unit)
 
 
-def build_dead_load_facts(input_dict: dict) -> DeadLoadFact:
+def build_dead_load_facts(
+    input_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> DeadLoadFact:
     """Table 3.1 — pure read from input_dict, no calculations."""
+    sd = _qv(input_dict.get("material.girder.density"), "kN/m³")
+    cd = _qv(input_dict.get("material.deck.density"), "kN/m³")
+    swf = _qv(input_dict.get("loading.permanent_load.dead_load.self_weight_factor"))
+
+    if tracker:
+        tracker.record("loading.dead_load.steel_density", ValueSource.INPUT_DICT, "material.girder.density", input_dict.get("material.girder.density"), sd.value, "kN/m³", "kN/m³", "none")
+        tracker.record("loading.dead_load.concrete_density", ValueSource.INPUT_DICT, "material.deck.density", input_dict.get("material.deck.density"), cd.value, "kN/m³", "kN/m³", "none")
+
     return DeadLoadFact(
-        steel_density=_qv(input_dict.get("material.girder.density"), "kN/m³"),
-        concrete_density=_qv(input_dict.get("material.deck.density"), "kN/m³"),
-        self_weight_factor=_qv(input_dict.get("loading.permanent_load.dead_load.self_weight_factor")),
+        steel_density=sd,
+        concrete_density=cd,
+        self_weight_factor=swf,
     )
 
 
-def build_surfacing_load_facts(input_dict: dict) -> SurfacingLoadFact:
+def build_surfacing_load_facts(
+    input_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> SurfacingLoadFact:
     """Table 3.2 — pure read from input_dict, no calculations."""
+    wct = _qv(input_dict.get("typical_section.wearing_course.thickness"), "mm")
+    cbl = _qv(input_dict.get("typical_section.crash_barrier.load"), "kN/m")
+    rl = _qv(input_dict.get("typical_section.railing.load_value"), "kN/m")
+
+    if tracker:
+        tracker.record("loading.surfacing.wearing_course_thickness", ValueSource.INPUT_DICT, "typical_section.wearing_course.thickness", input_dict.get("typical_section.wearing_course.thickness"), wct.value, "mm", "mm", "none")
+        tracker.record("loading.surfacing.crash_barrier_load", ValueSource.INPUT_DICT, "typical_section.crash_barrier.load", input_dict.get("typical_section.crash_barrier.load"), cbl.value, "kN/m", "kN/m", "none")
+
     return SurfacingLoadFact(
         wearing_course_material=str(input_dict.get("typical_section.wearing_course.material") or ""),
-        wearing_course_thickness=_qv(input_dict.get("typical_section.wearing_course.thickness"), "mm"),
-        crash_barrier_load=_qv(input_dict.get("typical_section.crash_barrier.load"), "kN/m"),
-        railing_load=_qv(input_dict.get("typical_section.railing.load_value"), "kN/m"),
+        wearing_course_thickness=wct,
+        crash_barrier_load=cbl,
+        railing_load=rl,
     )
 
 
-def build_live_load_facts(input_dict: dict) -> LiveLoadFact:
+def build_live_load_facts(
+    input_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> LiveLoadFact:
     """Table 3.3 — reads vehicle selection flags, calls IRC6 for computed values.
 
     Existing functions called:
@@ -355,12 +378,14 @@ def build_load_combination_facts() -> tuple[LoadCombinationFact, ...]:
     return tuple(combos)
 
 
-def build_load_facts(input_dict: dict) -> LoadFacts:
+def build_load_facts(
+    input_dict: dict, tracker: Optional[ProvenanceTracker] = None
+) -> LoadFacts:
     """Top-level builder — calls all sub-builders."""
     return LoadFacts(
-        dead_load=build_dead_load_facts(input_dict),
-        surfacing_load=build_surfacing_load_facts(input_dict),
-        live_load=build_live_load_facts(input_dict),
+        dead_load=build_dead_load_facts(input_dict, tracker=tracker),
+        surfacing_load=build_surfacing_load_facts(input_dict, tracker=tracker),
+        live_load=build_live_load_facts(input_dict, tracker=tracker),
         wind_load=build_wind_load_facts(input_dict),
         seismic_load=build_seismic_load_facts(input_dict),
         temperature_load=build_temperature_load_facts(input_dict),

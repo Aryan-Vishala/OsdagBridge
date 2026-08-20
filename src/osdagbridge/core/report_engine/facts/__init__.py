@@ -10,7 +10,8 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Any, Dict, List, Optional
+
 
 
 # ---------------------------------------------------------------------------
@@ -46,12 +47,19 @@ class ReportFacts:
     materials: Optional["MaterialFacts"] = None
     inputs: Optional["InputFacts"] = None
     design_check_data: Optional["DesignCheckData"] = None
+    provenance: Optional[Any] = None
 
     # Migration bridge: raw dicts needed by legacy chapter functions.
     # These will be removed once all chapters are fully migrated.
     raw_input_dict: Optional[Dict] = None
     raw_output_dict: Optional[Dict] = None
     design_checks: Optional[List[str]] = None
+
+    def provenance_report(self) -> str:
+        """Format and return the data provenance report."""
+        if self.provenance:
+            return self.provenance.format_report()
+        return "No provenance tracker attached to ReportFacts."
 
 
 @dataclass
@@ -455,8 +463,11 @@ class ShearConnectorData:
 class DeckLoadingGeometry:
     effective_span: Optional[QuantityValue] = None
     thickness: Optional[QuantityValue] = None
+    clear_cover_top: Optional[QuantityValue] = None
+    clear_cover_bot: Optional[QuantityValue] = None
     concrete_grade: Optional[str] = None
     fck: Optional[QuantityValue] = None
+    fctm: Optional[QuantityValue] = None
     reinf_grade: Optional[str] = None
     fy: Optional[QuantityValue] = None
     dead_load: Optional[QuantityValue] = None
@@ -467,30 +478,49 @@ class DeckLoadingGeometry:
 
 @dataclass(frozen=True)
 class DeckFlexureCheck:
+    # Sagging (Interior Panel)
+    m_dl_sag: Optional[QuantityValue] = None
+    m_ll_sag: Optional[QuantityValue] = None
+    gamma_dl: Optional[float] = None
+    gamma_ll: Optional[float] = None
     demand_sagging: Optional[QuantityValue] = None
+    d_bot: Optional[QuantityValue] = None
     capacity_sagging: Optional[QuantityValue] = None
     status_sagging: CheckStatus = CheckStatus.UNAVAILABLE
     
+    # Hogging (Support)
     demand_hogging: Optional[QuantityValue] = None
     required_top_steel: Optional[QuantityValue] = None
     capacity_hogging: Optional[QuantityValue] = None
     status_hogging: CheckStatus = CheckStatus.UNAVAILABLE
     
+    # Cantilever Overhang
     has_overhang: bool = False
     overhang_length: Optional[QuantityValue] = None
+    m_barrier: Optional[QuantityValue] = None
+    m_dl_oh: Optional[QuantityValue] = None
+    m_ll_oh: Optional[QuantityValue] = None
     demand_overhang: Optional[QuantityValue] = None
     capacity_overhang: Optional[QuantityValue] = None
     status_overhang: CheckStatus = CheckStatus.UNAVAILABLE
 
 @dataclass(frozen=True)
 class DeckShearCheck:
+    # Punching Shear (IRC 112 Cl. 10.4.6)
     punching_ved_kn: Optional[QuantityValue] = None
+    tyre_length: Optional[QuantityValue] = None
+    tyre_width: Optional[QuantityValue] = None
+    punching_c1: Optional[QuantityValue] = None
+    punching_c2: Optional[QuantityValue] = None
+    punching_u1: Optional[QuantityValue] = None
     punching_ved_mpa: Optional[QuantityValue] = None
     punching_vrdc_mpa: Optional[QuantityValue] = None
     punching_ur: Optional[float] = None
     punching_status: CheckStatus = CheckStatus.UNAVAILABLE
     
+    # One-Way (Beam) Shear
     oneway_ved: Optional[QuantityValue] = None
+    d_bot: Optional[QuantityValue] = None
     oneway_size_factor_k: Optional[float] = None
     oneway_rho_l: Optional[float] = None
     oneway_vrdc: Optional[QuantityValue] = None
@@ -499,6 +529,10 @@ class DeckShearCheck:
 
 @dataclass(frozen=True)
 class DeckCrackWidthCheck:
+    as_min: Optional[QuantityValue] = None
+    dia_bot: Optional[QuantityValue] = None
+    spc_bot: Optional[QuantityValue] = None
+    as_bot: Optional[QuantityValue] = None
     calculated: Optional[QuantityValue] = None
     limit: Optional[QuantityValue] = None
     status: CheckStatus = CheckStatus.UNAVAILABLE
@@ -507,16 +541,25 @@ class DeckCrackWidthCheck:
 class DeckDetailingCheck:
     required_bottom: Optional[QuantityValue] = None
     provided_bottom: Optional[QuantityValue] = None
-    
-    required_top: Optional[QuantityValue] = None
-    provided_top: Optional[QuantityValue] = None
+    dia_bot: Optional[QuantityValue] = None
+    spc_bot: Optional[QuantityValue] = None
+    as_min: Optional[QuantityValue] = None
+    spc_max: Optional[QuantityValue] = None
     
     required_dist: Optional[QuantityValue] = None
     provided_dist: Optional[QuantityValue] = None
     
+    required_top: Optional[QuantityValue] = None
+    provided_top: Optional[QuantityValue] = None
+    
+    min_cover: Optional[QuantityValue] = None
+    top_cover: Optional[QuantityValue] = None
+    bot_cover: Optional[QuantityValue] = None
+    
     status_bottom: CheckStatus = CheckStatus.UNAVAILABLE
-    status_top: CheckStatus = CheckStatus.UNAVAILABLE
     status_dist: CheckStatus = CheckStatus.UNAVAILABLE
+    status_top: CheckStatus = CheckStatus.UNAVAILABLE
+    status_cover: CheckStatus = CheckStatus.UNAVAILABLE
 
 @dataclass(frozen=True)
 class DeckDesignData:
@@ -562,6 +605,11 @@ class BracingMemberCheck:
     governing_lc: Optional[str]
     connection_type: Optional[str]
     section: Optional[str]
+    gross_area: Optional[QuantityValue] = None
+    rmin: Optional[QuantityValue] = None
+    effective_length: Optional[QuantityValue] = None
+    slenderness: Optional[float] = None
+    slenderness_limit: Optional[float] = None
 
 @dataclass(frozen=True)
 class BracingPanelData:

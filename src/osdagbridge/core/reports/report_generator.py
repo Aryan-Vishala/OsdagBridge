@@ -130,7 +130,24 @@ from .chap7 import ch7_quantities
 from .chap8 import ch8_design_log
 from .chap9 import references
 
+
+# Semantic Report Engine (Primary Production Pipeline)
+from osdagbridge.core.report_engine.facts import ReportFacts, FactMetadata, InputFacts
+from osdagbridge.core.report_engine.facts.inputs import build_input_facts
+from osdagbridge.core.report_engine.facts.design_checks import build_design_check_data
+from osdagbridge.core.report_engine.facts.material_takeoff import build_material_facts
+from osdagbridge.core.report_engine.facts.loads import build_load_facts
+from osdagbridge.core.report_engine.provenance import ProvenanceTracker
+from osdagbridge.core.report_engine.validation import validate_facts
+from osdagbridge.core.report_engine.theme import ReportTheme
+from osdagbridge.core.report_engine.renderer import LatexRenderer
+from osdagbridge.core.report_engine.document_builder import build_report_document
+from osdagbridge.core.report_engine.preflight import PDFPreflight
+
+REPORT_ENGINE_ENABLED = True  # Standard production default
+
 logger = logging.getLogger(__name__)
+
 
 # --- TEMPLATES START ---
 
@@ -156,7 +173,13 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \documentclass[12pt,a4paper]{report}
 
 % Packages
-\usepackage[a4paper, margin=1in]{geometry}
+\usepackage[a4paper, margin=1in, headheight=14pt, footskip=12mm]{geometry}
+\savegeometry{portrait}
+\geometry{a4paper, landscape, top=18mm, bottom=22mm, left=20mm, right=20mm, footskip=12mm, headheight=14pt}
+\savegeometry{landscape}
+\loadgeometry{portrait}
+
+\usepackage{pdflscape}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amssymb}
@@ -203,12 +226,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 % Prevent tables from overflowing past the page bottom:
 % if fewer than 5 baseline-skips remain, break to the next page first.
-% Use \Needspace (not \needspace) before longtables: the lowercase version
-% inserts stretchable glue around a penalty -100 that TeX may later prefer as a
-% break point after \LT@output is active, orphaning the longtable's head row
-% on the next page (e.g. a lone "parameter | value" line).
 \BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\Needspace{5\baselineskip}}
 
 \definecolor{osdagGreen}{HTML}{91B014}
 
@@ -218,16 +236,16 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
+  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
   \renewcommand{\footrule}{%
     \ifbool{hasSDonPage}{%
       \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
+      \hbox to \textwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
       \vspace{4pt}%
     }{%
       \vspace{-8pt}%
     }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
+    \color{osdagGreen}\hrule width\textwidth height 1pt \vspace{6pt}%
   }
 }
 \fancypagestyle{plain}{
@@ -236,16 +254,34 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
+  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
   \renewcommand{\footrule}{%
     \ifbool{hasSDonPage}{%
       \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
+      \hbox to \textwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
       \vspace{4pt}%
     }{%
       \vspace{-8pt}%
     }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
+    \color{osdagGreen}\hrule width\textwidth height 1pt \vspace{6pt}%
+  }
+}
+\fancypagestyle{osdaglandscape}{
+  \fancyhf{}
+  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
+  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
+  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
+  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
+  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
+  \renewcommand{\footrule}{%
+    \ifbool{hasSDonPage}{%
+      \vspace{-20pt}%
+      \hbox to \textwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
+      \vspace{4pt}%
+    }{%
+      \vspace{-8pt}%
+    }%
+    \color{osdagGreen}\hrule width\textwidth height 1pt \vspace{6pt}%
   }
 }
 \fancypagestyle{firstpage}{
@@ -264,6 +300,23 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 \newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
 \newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+% Dedicated landscape environment with matching horizontal header/footer
+\newenvironment{osdaglandscape}{%
+  \clearpage
+  \pdfpagewidth=297mm
+  \pdfpageheight=210mm
+  \loadgeometry{landscape}
+  \pagestyle{osdaglandscape}
+  \fancyhfoffset[L,R]{0pt}
+}{%
+  \clearpage
+  \loadgeometry{portrait}
+  \pdfpagewidth=210mm
+  \pdfpageheight=297mm
+  \pagestyle{main}
+  \fancyhfoffset[L,R]{0pt}
+}
 
 % Software-default asterisk
 \newcommand{\sdstar}{\textsuperscript{*}}
@@ -850,12 +903,19 @@ def generate_report(payload, request):
             latex_env = getattr(module, 'OsdagLatexEnv')()
             if latex_env.pdflatex:
                 compiler = str(latex_env.pdflatex)
-                # Ensure the bin directory is in PATH so subprocess can find DLLs if needed
                 if latex_env.bin_dir:
                     os.environ['PATH'] = str(latex_env.bin_dir) + os.pathsep + os.environ.get('PATH', '')
         except Exception as e:
             logger.info("osdag_latex_env not found or failed to load. (%s)", e)
-            
+
+        if compiler == 'pdflatex' and not shutil.which('pdflatex'):
+            candidate_bin = r"C:\Users\aryan\miniconda3\envs\osdagbridge-env\Library\share\osdag_latex_env\bin\x86_64-windows"
+            candidate_exe = os.path.join(candidate_bin, "pdflatex.exe")
+            if os.path.exists(candidate_exe):
+                compiler = candidate_exe
+                os.environ['PATH'] = candidate_bin + os.pathsep + os.environ.get('PATH', '')
+                logger.info("Found fallback bundled pdflatex at: %s", compiler)
+
         logger.info("Compiler: %s", compiler)
 
         os.makedirs(request.output_dir, exist_ok=True)
@@ -907,6 +967,36 @@ def generate_report(payload, request):
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
             span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
 
+            # ── Semantic Report Engine Assembly ──
+            if REPORT_ENGINE_ENABLED:
+                tracker = ProvenanceTracker()
+                facts = ReportFacts(
+                    metadata=FactMetadata(
+                        project_name=payload.metadata.project_name,
+                        project_location=payload.metadata.project_location,
+                        designer=payload.metadata.designer,
+                        client=payload.metadata.client,
+                        company=getattr(payload.metadata, 'company', '')
+                    ),
+                    inputs=build_input_facts(payload.inputs, tracker=tracker),
+                    loads=build_load_facts(payload.inputs, tracker=tracker),
+                    design_check_data=build_design_check_data(payload.output_dict, payload.inputs, tracker=tracker),
+                    materials=build_material_facts(payload.inputs, payload.output_dict, tracker=tracker),
+                    provenance=tracker,
+                    raw_input_dict=payload.inputs,
+                    raw_output_dict=payload.output_dict,
+                    design_checks=payload.design_checks
+                )
+                v_rep = validate_facts(facts)
+                if not v_rep.is_valid:
+                    logger.warning("Report facts validation issues: %s", [e.message for e in v_rep.errors])
+                document = build_report_document(facts, payload.options.sections)
+                theme = ReportTheme()
+                renderer = LatexRenderer(theme)
+                engine_chapters = {ch.number: renderer.render_chapter(ch) for ch in document.chapters}
+            else:
+                engine_chapters = {}
+
             doc_parts = []
             doc_parts.append(preamble(payload.metadata.project_name, payload.metadata.job_number, payload.metadata.report_date, payload.metadata.subtitle or 'Rev 0'))
             doc_parts.append(title_page(payload.metadata, osdag_logo_latex, org_logo_latex))
@@ -921,18 +1011,30 @@ def generate_report(payload, request):
 
             doc_parts.append(executive_summary(payload.inputs, payload.output_dict, fig_paths))
             doc_parts.append(ch1_project_info(payload.metadata))
-            doc_parts.append(ch2_input_parameters(payload.metadata, payload.inputs, payload.output_dict))
+            if 2 in engine_chapters:
+                doc_parts.append(engine_chapters[2])
+            else:
+                doc_parts.append(ch2_input_parameters(payload.metadata, payload.inputs, payload.output_dict))
 
             if 'loads' in secs:
-                doc_parts.append(ch3_loads(payload.inputs))
+                if 3 in engine_chapters:
+                    doc_parts.append(engine_chapters[3])
+                else:
+                    doc_parts.append(ch3_loads(payload.inputs))
             if 'analysis' in secs:
                 doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge, span_m))
             if 'design_checks' in secs:
-                doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
+                if 5 in engine_chapters:
+                    doc_parts.append(engine_chapters[5])
+                else:
+                    doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            if 7 in engine_chapters:
+                doc_parts.append(engine_chapters[7])
+            else:
+                doc_parts.append(ch7_quantities(payload.inputs))
 
             mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
             is_custom = mode in {"custom", "customized"}

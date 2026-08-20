@@ -6,6 +6,7 @@ function for the Project Location table.
 """
 
 from osdagbridge.core.report_engine.facts import FactMetadata, ReportFacts
+from osdagbridge.core.report_engine.facts.inputs import build_input_facts
 from osdagbridge.core.report_engine.chapters.ch2_document import (
     _build_bridge_geometry_table,
     _build_components_details_table,
@@ -137,34 +138,34 @@ class TestRenderedProjectLocation:
     def test_bridge_geometry_table_rendered(self):
         """The Bridge Geometry table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Bridge Geometry}" in latex
+        assert r"\caption{\textbf{Bridge Geometry}}" in latex
         assert "Type of Structure" in latex
 
     def test_material_selection_table_rendered(self):
         """The Material Selection table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Material Selection}" in latex
+        assert r"\caption{\textbf{Material Selection}}" in latex
         assert "Girder Steel Grade (IS 2062)" in latex
 
     def test_typical_section_table_rendered(self):
         """The Typical Section Details table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Typical Section Details}" in latex
+        assert r"\caption{\textbf{Typical Section Details}}" in latex
 
     def test_components_details_table_rendered(self):
         """The Components Details table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Components Details}" in latex
+        assert r"\caption{\textbf{Components Details}}" in latex
 
     def test_shear_connector_table_rendered(self):
         """The Shear Connector Details table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Shear Connector Details}" in latex
+        assert r"\caption{\textbf{Shear Connector Details}}" in latex
 
     def test_safety_factors_table_rendered(self):
         """The Partial Safety Factors table is now a semantic Table component."""
         latex = self._build_and_render(FACTS)
-        assert r"\caption{Partial Safety Factors}" in latex
+        assert r"\caption{\textbf{Partial Safety Factors}}" in latex
 
     def test_section_heading_present(self):
         latex = self._build_and_render(FACTS)
@@ -195,7 +196,7 @@ class TestProjectLocationEdgeCases:
         )
         table = _build_project_location_table(facts)
         assert table.rows[0] == ["Project Location", ""]
-        assert table.rows[1] == ["Latitude / Longitude", ", "]
+        assert table.rows[1] == ["Latitude / Longitude", ""]
 
     def test_special_characters_in_data(self):
         """Row data can contain special characters — the renderer escapes them."""
@@ -213,6 +214,23 @@ class TestProjectLocationEdgeCases:
         # Raw data has & — renderer will escape it
         assert "&" in table.rows[0][1]
         assert "&" in table.rows[2][1]
+
+    def test_float_values(self):
+        """Numeric values (like lat/lon floats from production payload) are safely converted to string."""
+        facts = ReportFacts(
+            metadata=FactMetadata(project_name="", project_location="", designer="", client="", company=""),
+            raw_input_dict={
+                "latitude": 28.9845,
+                "longitude": 77.7064,
+                "wind_speed": 39.5,
+                "shade_temp_max": 45,
+                "shade_temp_min": 10.0,
+            },
+        )
+        table = _build_project_location_table(facts)
+        assert table.rows[1] == ["Latitude / Longitude", "28.9845, 77.7064"]
+        assert table.rows[3] == ["Basic Wind Speed (IRC 6)", "39.5 m/s"]
+        assert table.rows[4] == ["Shade Temp. Max / Min (IRC 6)", "45 °C / 10.0 °C"]
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +254,7 @@ BG_FACTS = ReportFacts(
         "geometry.skew_angle": "10",
     },
 )
+BG_FACTS.inputs = build_input_facts(BG_FACTS.raw_input_dict)
 
 
 class TestBridgeGeometryTable:
@@ -282,8 +301,8 @@ class TestBridgeGeometryTable:
     def test_row_skew_angle_with_note(self):
         t = _build_bridge_geometry_table(BG_FACTS)
         assert t.rows[5][0] == "Skew Angle (degrees)"
-        assert "10°" in t.rows[5][1]
-        assert "IRC 24" in t.rows[5][1]
+        assert "10" in t.rows[5][1][0]
+        assert "IRC 24" in t.rows[5][1][1]
 
     def test_no_latex_in_row_data(self):
         """Row data is plain text — no LaTeX commands."""
@@ -407,6 +426,7 @@ TS_FACTS = ReportFacts(
         "typical_section.lane_details.lane_table_count": "2",
     },
 )
+TS_FACTS.inputs = build_input_facts(TS_FACTS.raw_input_dict)
 
 
 class TestTypicalSectionTable:
@@ -422,7 +442,7 @@ class TestTypicalSectionTable:
 
     def test_row_overall_width(self):
         t = _build_typical_section_table(TS_FACTS)
-        assert t.rows[0] == ["Overall Bridge Width (m)", "12.5"]
+        assert t.rows[0] == ["Overall Bridge Width (m)", "12.5 m"]
 
     def test_row_no_of_girders(self):
         t = _build_typical_section_table(TS_FACTS)
@@ -583,6 +603,46 @@ class TestComponentsDetailsEdgeCases:
         assert len(t.rows) == 6
         assert t.rows[0] == ["Crash Barrier Type", ""]
 
+    def test_unit_conversion(self):
+        from osdagbridge.core.report_engine.chapters.ch2_document import _build_girder_section_details_table
+        from osdagbridge.core.report_engine.facts import ReportFacts, FactMetadata
+    
+        # Simulated input dict with raw values in metres.
+        input_dict = {
+            'typical_section.no_of_girders': '1',
+            'member_properties.girder_details.select_girder.G1': 'G1',
+            'member_properties.girder_details.member_id.G1.M1': 'G1M1',
+        }
+    
+        facts = ReportFacts(
+            metadata=FactMetadata(
+                project_name="", project_location="", designer="",
+                client="", company="",
+            ),
+            raw_input_dict=input_dict
+        )
+    
+        # My table builder uses raw_output_dict for girder dimensions!
+        facts.raw_output_dict = {
+            'steeldesign.girders.[0].id': 'G1',
+            'steeldesign.girders.[0].section.web_depth': 1670.0,
+            'steeldesign.girders.[0].section.web_thickness': 10.0,
+            'steeldesign.girders.[0].section.top_flange_width': 510.0,
+            'steeldesign.girders.[0].section.top_flange_thickness': 22.0,
+            'steeldesign.girders.[0].section.bot_flange_width': 510.0,
+            'steeldesign.girders.[0].section.bot_flange_thickness': 22.0,
+        }
+    
+        t = _build_girder_section_details_table(facts)
+    
+        assert len(t.rows) == 1
+        r = t.rows[0]
+        assert r[0] == 'G1'
+        assert r[1] == '1670 mm'
+        assert r[2] == '10 mm'
+        assert r[3] == '510 mm, 22 mm'
+        assert r[4] == '510 mm, 22 mm'
+
 
 # ---------------------------------------------------------------------------
 # Shear Connector Details table tests
@@ -604,6 +664,8 @@ SC_FACTS = ReportFacts(
         "steeldesign.details.shear.studs_per_section": "3",
     },
 )
+FACTS.inputs = build_input_facts(FACTS.raw_input_dict)
+SC_FACTS.inputs = build_input_facts(SC_FACTS.raw_input_dict or {})
 
 
 class TestShearConnectorTable:
@@ -627,11 +689,13 @@ class TestShearConnectorTable:
 
     def test_row_yield_strength(self):
         t = _build_shear_connector_table(SC_FACTS)
-        assert t.rows[2] == ["Stud $f_y$ (MPa)", "250 MPa"]
+        assert t.rows[2][0][1].content == r"f_y"
+        assert t.rows[2][1] == "250 MPa"
 
     def test_row_ultimate_strength(self):
         t = _build_shear_connector_table(SC_FACTS)
-        assert t.rows[3] == ["Stud $f_u$ (MPa)", "410 MPa"]
+        assert t.rows[3][0][1].content == r"f_u"
+        assert t.rows[3][1] == "410 MPa"
 
     def test_row_studs_per_section(self):
         t = _build_shear_connector_table(SC_FACTS)
@@ -680,6 +744,7 @@ SF_FACTS = ReportFacts(
         "design_options_cont.partial_factor.fatigue_strength.gamma_mf": "1.15",
     },
 )
+SF_FACTS.inputs = build_input_facts(SF_FACTS.raw_input_dict)
 
 
 class TestSafetyFactorsTable:
@@ -699,26 +764,32 @@ class TestSafetyFactorsTable:
 
     def test_row_gamma_m1(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[1][0][0].content == r"\gamma_{M1}"
         assert t.rows[1][1] == "1.25"
 
     def test_row_gamma_c(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[2][0][0].content == r"\gamma_C"
         assert t.rows[2][1] == "1.50"
 
     def test_row_gamma_s(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[3][0][0].content == r"\gamma_s"
         assert t.rows[3][1] == "1.15"
 
     def test_row_gamma_v(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[4][0][0].content == r"\gamma_v"
         assert t.rows[4][1] == "1.25"
 
     def test_row_gamma_flt(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[5][0][0].content == r"\gamma_{fft}"
         assert t.rows[5][1] == "1.50"
 
     def test_row_gamma_mf(self):
         t = _build_safety_factors_table(SF_FACTS)
+        assert t.rows[6][0][0].content == r"\gamma_{Mft}"
         assert t.rows[6][1] == "1.15"
 
     def test_no_latex_in_values(self):

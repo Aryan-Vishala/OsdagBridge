@@ -1,0 +1,21 @@
+CONFIGURATION ACCEPTANCE REPORT: 5_girders
+--------------------------------------------------
+Girders:                 5
+Intermediate Stiffeners: True
+Deck Slab Check:         True
+Footway Load:            True
+PDF File:                config_5_girders.pdf
+File Size:               535,384 bytes
+Total Page Count:        50 pages
+
+CHAPTER INTEGRITY:
+  Chapter 1 (Project Info):       PASS
+  Chapter 2 (Inputs):             PASS
+  Chapter 3 (Loads):              PASS
+  Chapter 5 (Design Checks):      PASS
+  Chapter 7 (Material Take-off):  PASS
+
+PREFLIGHT STATUS:        PASS
+PREFLIGHT CHECKS:
+  [PASS] Document Structure: Found 4 chapters.
+  [PASS] Footer Collision: No body content entered footer reserve.

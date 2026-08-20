@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from osdagbridge.core.report_engine.document import (
-    Chapter, Column, Chart, RawLatex, Section, Table
+    Chapter, Column, Chart, Paragraph, RawLatex, Section, Table
 )
 from osdagbridge.core.report_engine.facts import (
     MaterialFacts, TakeoffItem, QuantityValue, ReportFacts
@@ -14,6 +14,7 @@ def _fmt_qv(qv: QuantityValue | None, prec: int = 2) -> str:
         return "---"
     return f"{qv.value:.{prec}f}"
 
+
 def _fmt_formula(components: tuple[QuantityValue, ...] | None, unit_volume: QuantityValue | None) -> str:
     """Reconstructs a formula string from semantic components."""
     if not components:
@@ -21,16 +22,21 @@ def _fmt_formula(components: tuple[QuantityValue, ...] | None, unit_volume: Quan
     
     parts = []
     for comp in components:
-        # Some legacy formulas have .5f precision for area
         unit_str = comp.unit.replace("²", "^2").replace("³", "^3")
         if comp.unit == "m²":
             parts.append(f"{comp.value:.5f} {unit_str}")
         elif comp.unit == "m":
-            # 2 decimals for span/length usually
             parts.append(f"{comp.value:.2f} {unit_str}")
+        elif comp.unit == "mm":
+            parts.append(f"{comp.value:.2f} {unit_str}")
+        elif comp.unit == "No.":
+            parts.append(f"{int(comp.value)}")
         else:
             parts.append(f"{comp.value:.2f} {unit_str}")
     
+    if not parts:
+        return "N.A."
+
     formula_str = " x ".join(parts)
     if unit_volume is not None:
         unit_vol_str = unit_volume.unit.replace("²", "^2").replace("³", "^3")
@@ -51,10 +57,8 @@ def _build_row(sn: str, item: TakeoffItem | None, label_fallback: str) -> list[s
             "---"
         ]
         
-    # Rebuild formula explicitly to match legacy BOQ formatting
     formula_str = _fmt_formula(item.formula_components, item.unit_volume)
     
-    # Precisions
     unit_wt_prec = 2
     tot_wt_prec = 2
     if "Cross Bracing" in item.item_description:
@@ -62,10 +66,6 @@ def _build_row(sn: str, item: TakeoffItem | None, label_fallback: str) -> list[s
     elif "Stud" in item.item_description:
         unit_wt_prec = 6
         tot_wt_prec = 3
-        
-    # The legacy format relies on "N.A." for empty quantity, but user specified None -> ---
-    # except the user said legacy fallback uses N.A.
-    # We will use --- to signify unavailable.
     
     return [
         sn,
@@ -80,7 +80,6 @@ def _build_row(sn: str, item: TakeoffItem | None, label_fallback: str) -> list[s
 
 def _build_table_7_1(facts: MaterialFacts) -> Table:
     """Builds Table 7.1 (Bill of Materials)"""
-    
     columns = [
         Column("S.N.", width="C{1.0cm}"),
         Column("Item Description", width="L{3.8cm}"),
@@ -92,11 +91,11 @@ def _build_table_7_1(facts: MaterialFacts) -> Table:
     ]
     
     rows = [
-        _build_row("1", facts.structural_steel.girders, "Structural Steel (IS 2062) for Girders"),
-        _build_row("2(a)", facts.structural_steel.cross_bracing_top, "Cross Bracing - Top Chord"),
-        _build_row("2(b)", facts.structural_steel.cross_bracing_bot, "Cross Bracing - Bottom Chord"),
-        _build_row("2(c)", facts.structural_steel.cross_bracing_diag, "Cross Bracing - Diagonal Chord"),
-        _build_row("2(d)", facts.structural_steel.end_diaphragms, "End Diaphragm"), # explicitly handle this
+        _build_row("1", facts.structural_steel.girders if facts.structural_steel else None, "Structural Steel (IS 2062) for Girders"),
+        _build_row("2(a)", facts.structural_steel.cross_bracing_top if facts.structural_steel else None, "Cross Bracing - Top Chord"),
+        _build_row("2(b)", facts.structural_steel.cross_bracing_bot if facts.structural_steel else None, "Cross Bracing - Bottom Chord"),
+        _build_row("2(c)", facts.structural_steel.cross_bracing_diag if facts.structural_steel else None, "Cross Bracing - Diagonal Chord"),
+        _build_row("2(d)", facts.structural_steel.end_diaphragms if facts.structural_steel else None, "End Diaphragm"),
         _build_row("3", facts.concrete_volume, "Concrete (M40) for Deck Slab"),
         _build_row("4", facts.reinforcement_steel, "Reinforcement Steel (Fe 500)"),
         _build_row("5", facts.shear_studs, "Shear Stud Connectors"),
@@ -104,31 +103,31 @@ def _build_table_7_1(facts: MaterialFacts) -> Table:
     ]
     
     return Table(
-        caption="Table 7.1  Bill of Materials (Steel, Concrete, and Reinforcement Quantities)",
+        caption="Bill of Materials (Steel, Concrete, and Reinforcement Quantities)",
         columns=columns,
         rows=rows,
+        label="tab:bill_of_materials"
     )
 
+
 def _build_charts(facts: MaterialFacts) -> list[Chart]:
-    """Builds the 3 material charts (Requirement 5C)."""
+    """Builds the 3 material charts with professional aesthetics."""
     charts = []
 
     # 1. Structural Steel Quantities (MT)
     steel = facts.structural_steel
-    girders_wt = steel.girders.total_weight.value if steel.girders and steel.girders.total_weight else None
+    girders_wt = steel.girders.total_weight.value if steel and steel.girders and steel.girders.total_weight else None
     
     cb_wts = [
         getattr(getattr(steel, attr), "total_weight").value if getattr(steel, attr) and getattr(getattr(steel, attr), "total_weight") else None
         for attr in ["cross_bracing_top", "cross_bracing_bot", "cross_bracing_diag"]
-    ]
-    # Sum them if any exist; if all are None, cb_wt is None. But wait! If some are missing?
-    # If all 3 are None, cross_bracing is unavailable (None).
+    ] if steel else [None]
     if all(w is None for w in cb_wts):
         cb_wt = None
     else:
         cb_wt = sum(w for w in cb_wts if w is not None)
 
-    ed_wt = steel.end_diaphragms.total_weight.value if steel.end_diaphragms and steel.end_diaphragms.total_weight else None
+    ed_wt = steel.end_diaphragms.total_weight.value if steel and steel.end_diaphragms and steel.end_diaphragms.total_weight else None
 
     chart_steel = Chart(
         title="Structural Steel Quantities",
@@ -138,7 +137,10 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
             "Cross Bracing": cb_wt,
             "End Diaphragms": ed_wt
         },
-        y_label="Weight (MT)"
+        y_label="Weight (MT)",
+        colors=["#1E3A8A", "#2563EB", "#60A5FA"],
+        width_cm=14.5,
+        height_cm=5.6,
     )
     charts.append(chart_steel)
 
@@ -150,7 +152,10 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
         data={
             "Concrete Deck Slab": concrete_vol
         },
-        y_label="Volume (m³)"
+        y_label="Volume (m³)",
+        colors=["#0D9488"],
+        width_cm=14.5,
+        height_cm=5.2,
     )
     charts.append(chart_concrete)
 
@@ -162,28 +167,29 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
         data={
             "Reinforcement Steel": rebar_wt
         },
-        y_label="Weight (MT)"
+        y_label="Weight (MT)",
+        colors=["#D97706"],
+        width_cm=14.5,
+        height_cm=5.2,
     )
     charts.append(chart_rebar)
 
     return charts
 
+
 def build_chapter_7(facts: ReportFacts) -> Chapter:
-    # Get MaterialFacts from ReportFacts if available.
-    # Currently, MaterialFacts is built in report_generator.py and needs to be accessible in ReportFacts
+    """Build Chapter 7: Material Take-off & Quantity Summary."""
     if hasattr(facts, "material_facts") and facts.material_facts:
         mat_facts = facts.material_facts
     else:
-        # Extract on the fly if not attached to ReportFacts yet
         from osdagbridge.core.report_engine.facts.material_takeoff import build_material_facts
         mat_facts = build_material_facts(facts.raw_input_dict or {}, facts.raw_output_dict or {})
 
     components = [
-        _build_table_7_1(mat_facts)
+        _build_table_7_1(mat_facts),
+        Paragraph("The charts below summarize the distribution of structural steel components and key construction material quantities required for the bridge superstructure."),
+        *_build_charts(mat_facts)
     ]
-    
-    # Add charts
-    components.extend(_build_charts(mat_facts))
     
     return Chapter(
         number=7,

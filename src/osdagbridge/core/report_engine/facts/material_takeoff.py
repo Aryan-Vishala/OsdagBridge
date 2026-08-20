@@ -1,13 +1,16 @@
 import logging
+from typing import Optional, Dict, Any
 from osdagbridge.core.utils.common import (
     KEY_SPAN,
     KEY_TS_NO_OF_GIRDERS,
     KEY_TS_DECK_THICKNESS,
     KEY_TS_GIRDER_SPACING,
+    KEY_SD_SECTION_PROP_AREA,
 )
 from osdagbridge.core.report_engine.facts import (
     TakeoffItem, StructuralSteelTakeoff, MaterialFacts, QuantityValue
 )
+from osdagbridge.core.report_engine.provenance import ProvenanceTracker, ValueSource
 
 logger = logging.getLogger("osdagbridge.core.report_engine.facts.material_takeoff")
 
@@ -24,7 +27,11 @@ def _resolve_girder_value(source: dict, base_key: str, i: int = 0):
     raise KeyError(base_key)
 
 
-def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
+def build_material_facts(
+    inputs: dict,
+    outputs: dict,
+    tracker: Optional[ProvenanceTracker] = None,
+) -> MaterialFacts:
     span_val = inputs.get(KEY_SPAN)
     n_girders_val = inputs.get(KEY_TS_NO_OF_GIRDERS)
 
@@ -120,6 +127,14 @@ def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
             girder_area = ((dw * tw) + (bft * tft) + (bfb * tfb)) / 1e6
         except Exception:
             pass
+
+    if girder_area <= 0:
+        area_cm2 = outputs.get(KEY_SD_SECTION_PROP_AREA) or outputs.get("steeldesign.details.section_properties.area")
+        if area_cm2 is not None:
+            try:
+                girder_area = float(area_cm2) / 10000.0  # cm² to m²
+            except Exception:
+                pass
 
     girder_item = None
     if girder_area > 0:
@@ -298,7 +313,7 @@ def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
         )
 
     # Note: End Diaphragms intentionally omitted (extracted as None)
-    return MaterialFacts(
+    mat_facts = MaterialFacts(
         structural_steel=StructuralSteelTakeoff(
             girders=girder_item,
             cross_bracing_top=cb_top,
@@ -311,3 +326,37 @@ def build_material_facts(inputs: dict, outputs: dict) -> MaterialFacts:
         shear_studs=shear_studs,
         crash_barrier=crash_barrier
     )
+
+    if tracker:
+        if girder_item and girder_item.total_weight:
+            tracker.record(
+                fact_name="material_takeoff.structural_steel.girders_weight",
+                source=ValueSource.DERIVED,
+                source_key="calculated_girder_weight",
+                source_value=girder_item.total_weight.value,
+                extracted_value=girder_item.total_weight.value,
+                target_unit="MT",
+                transform="sum(girder_volume * 7.85)",
+            )
+        if concrete_deck and concrete_deck.total_volume:
+            tracker.record(
+                fact_name="material_takeoff.concrete_deck.total_volume",
+                source=ValueSource.DERIVED,
+                source_key="calculated_deck_volume",
+                source_value=concrete_deck.total_volume.value,
+                extracted_value=concrete_deck.total_volume.value,
+                target_unit="m³",
+                transform="deck_area * span",
+            )
+        if rebar_deck and rebar_deck.total_weight:
+            tracker.record(
+                fact_name="material_takeoff.reinforcement_steel.total_weight",
+                source=ValueSource.DERIVED,
+                source_key="calculated_rebar_weight",
+                source_value=rebar_deck.total_weight.value,
+                extracted_value=rebar_deck.total_weight.value,
+                target_unit="MT",
+                transform="deck_volume * 160 kg/m³ / 1000",
+            )
+
+    return mat_facts

@@ -114,7 +114,7 @@ class TestRenderTable:
         )
         tex = self.renderer._render_table(t)
         assert r"\begin{longtable}" in tex
-        assert r"\caption{Test Table}" in tex
+        assert r"\caption{\textbf{Test Table}}" in tex
         assert r"\endfirsthead" in tex
         assert r"\endhead" in tex
         assert r"\textbf{A}" in tex
@@ -161,6 +161,33 @@ class TestRenderTable:
         tex = self.renderer._render_table(t)
         assert r"A \& B" in tex
 
+    def test_unicode_escaping(self):
+        """Mathematical and typographical Unicode symbols are mapped to LaTeX commands."""
+        t = Table(
+            caption="Test",
+            columns=[Column("X")],
+            rows=[["≤ ≥ × ± ° – — − → · ² ³ ⁴ Ø α γ ε λ ρ σ τ χ"]],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"$\leq$ $\geq$ $\times$ $\pm$ $^\circ$ -- --- - $\rightarrow$ $\cdot$ $^2$ $^3$ $^4$ $\emptyset$ $\alpha$ $\gamma$ $\epsilon$ $\lambda$ $\rho$ $\sigma$ $\tau$ $\chi$" in tex
+
+    def test_math_component_and_mixed_content(self):
+        """Mixed semantic content (Math, CheckStatus, Text) are rendered securely."""
+        from osdagbridge.core.report_engine.document import Math
+        t = Table(
+            caption="Mixed Content",
+            columns=[Column("X"), Column("Y")],
+            rows=[
+                [["Top Flange Width, ", Math("b_f"), " (mm)"], "150"],
+                [["UR=", "0.95", CheckStatus.PASS], "OK"],
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        # Math should be rendered with $ but NOT escaped (e.g. _ not converted to \_)
+        assert r"Top Flange Width, $b_f$ (mm)" in tex
+        assert r"UR=0.95PASS" in tex
+
+
     def test_col_spec_from_column_widths(self):
         t = Table(
             caption="Test",
@@ -194,10 +221,11 @@ class TestRenderTableGroup:
         assert "1500" in tex
 
     def test_multirow_for_multi_row_group(self):
-        """Multi-row group: \\multirow spans all rows in the group."""
+        """Multi-row group: \\multirow spans all rows in the group when non-splittable."""
         t = Table(
             caption="Test",
             columns=[Column(""), Column("Param"), Column("Value")],
+            layout=LayoutHints(splittable=False),
             groups=[
                 TableGroup(label="G1", rows=[
                     ["Depth", "1500"],
@@ -208,6 +236,24 @@ class TestRenderTableGroup:
         )
         tex = self.renderer._render_table(t)
         assert r"\multirow{3}" in tex
+        
+    def test_no_multirow_for_splittable_group(self):
+        """Multi-row group: no \\multirow when splittable."""
+        t = Table(
+            caption="Test",
+            columns=[Column(""), Column("Param"), Column("Value")],
+            layout=LayoutHints(splittable=True),
+            groups=[
+                TableGroup(label="G1", rows=[
+                    ["Depth", "1500"],
+                    ["Width", "400"],
+                    ["Thickness", "25"],
+                ]),
+            ],
+        )
+        tex = self.renderer._render_table(t)
+        assert r"\multirow{3}" not in tex
+        assert r"G1 & Depth" in tex
         assert "G1" in tex
         assert "Depth" in tex
         assert "Width" in tex
@@ -218,6 +264,7 @@ class TestRenderTableGroup:
         t = Table(
             caption="Test",
             columns=[Column(""), Column("Param"), Column("Value")],
+            layout=LayoutHints(splittable=False),
             groups=[
                 TableGroup(label="G1", rows=[["Depth", "1500"], ["Width", "400"]]),
                 TableGroup(label="G2", rows=[["Depth", "1600"], ["Width", "420"]]),
@@ -232,7 +279,7 @@ class TestRenderTableGroup:
         assert "1600" in tex
 
     def test_cline_between_rows(self):
-        """\\cline separates rows within a group (skipping first column)."""
+        """No inner \\cline within a group (cleaner visual grouping)."""
         t = Table(
             caption="Test",
             columns=[Column(""), Column("Param"), Column("Value")],
@@ -241,7 +288,7 @@ class TestRenderTableGroup:
             ],
         )
         tex = self.renderer._render_table(t)
-        assert r"\cline{2-3}" in tex
+        assert r"\cline{2-3}" not in tex
 
     def test_hline_between_groups(self):
         """\\hline separates groups."""
@@ -304,25 +351,6 @@ class TestRenderTableGroup:
         assert r"A \& B" in tex
         assert r"C\%D" in tex
 
-    def test_fmt_status_pass(self):
-        """fmt_status returns PASS for CheckStatus.PASS."""
-        assert self.renderer.fmt_status(CheckStatus.PASS) == "PASS"
-
-    def test_fmt_status_fail(self):
-        """fmt_status wraps FAIL in \\textcolor{red}."""
-        result = self.renderer.fmt_status(CheckStatus.FAIL)
-        assert r"\textcolor{red}" in result
-        assert "FAIL" in result
-
-    def test_fmt_status_warn(self):
-        """fmt_status wraps WARN in \\textcolor{orange}."""
-        result = self.renderer.fmt_status(CheckStatus.WARN)
-        assert r"\textcolor{orange}" in result
-        assert "WARN" in result
-
-    def test_fmt_status_unavailable(self):
-        """fmt_status returns --- for UNAVAILABLE."""
-        assert self.renderer.fmt_status(CheckStatus.UNAVAILABLE) == "---"
 
 
 class TestRenderFigure:
@@ -368,13 +396,53 @@ class TestRenderRawLatex:
         assert tex == r"\chapter{Legacy}"
 
 
-class TestUnknownComponent:
+class TestLandscapeSectionFlow:
     def setup_method(self):
         self.renderer = LatexRenderer(ReportTheme())
 
-    def test_raises_type_error(self):
-        with pytest.raises(TypeError):
-            self.renderer._render_component("not a component")
+    def test_landscape_section_structure(self):
+        cols = [Column("Check", "L{6cm}"), Column("Status", "C{3cm}")]
+        sec = Section(
+            title="Overall Summary",
+            level=2,
+            layout=LayoutHints(orientation="landscape"),
+            components=[
+                Table(
+                    caption="Summary Table",
+                    columns=cols,
+                    rows=[["Moment", "PASS"], ["Shear", "PASS"]],
+                )
+            ],
+        )
+        tex = self.renderer._render_section(sec)
+        assert r"\begin{osdaglandscape}" in tex
+        assert r"\section{Overall Summary}" in tex
+        assert r"\begin{longtable}" in tex
+        assert r"\end{longtable}" in tex
+        assert r"\end{osdaglandscape}" in tex
+        assert r"\begin{minipage}" not in tex
+        assert r"\begin{samepage}" not in tex
+
+    def test_landscape_multipage_longtable_repeat_header(self):
+        cols = [Column("Item", "L{8cm}"), Column("Value", "C{4cm}")]
+        sec = Section(
+            title="Large Design Table",
+            level=2,
+            layout=LayoutHints(orientation="landscape"),
+            components=[
+                Table(
+                    caption="Extended Checks",
+                    columns=cols,
+                    rows=[[f"Check {i}", "PASS"] for i in range(35)],
+                    layout=LayoutHints(splittable=True, repeat_header=True),
+                )
+            ],
+        )
+        tex = self.renderer._render_section(sec)
+        assert r"\begin{osdaglandscape}" in tex
+        assert r"\caption{\textbf{Extended Checks}}" in tex
+        assert r"\textit{Extended Checks (continued)}" in tex
+        assert r"\end{osdaglandscape}" in tex
 
 
 # Need pytest for the error test

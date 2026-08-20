@@ -7,35 +7,43 @@
 # =============================================================================
 
 
-def make_longtable(col_spec, caption, header_rows, body, *,
-                   header_row_end=r" \\", repeat_header=None, pre="", post=""):
+def make_longtable(col_spec, caption=None, header_rows=None, body="", *,
+                   num_cols=None, header_row_end=r" \\", repeat_header=None, pre="", post="", **kwargs):
     """Build a longtable whose header repeats on continuation pages.
 
-    Parameters
-    ----------
-    col_spec:
-        Column specification, e.g. ``r"|L{5.5cm}|p{10.0cm}|"``.
-    caption:
-        Caption body (inner text), e.g. ``r"\\textbf{Dead Load -- Self Weight}"``.
-    header_rows:
-        List of header row strings. Each is emitted verbatim followed by
-        ``header_row_end`` (without a trailing newline of its own).
-    body:
-        Fully rendered LaTeX for the table body. Passed through untouched.
-    header_row_end:
-        Terminator appended to every entry in ``header_rows``.
-    repeat_header:
-        Opaque string repeated at the top of every continuation page.
-        Defaults to ``pre + header_rows + post``.
-    pre:
-        Opaque string emitted after the caption (before the header rows).
-    post:
-        Opaque string emitted after the header rows (before ``\\endfirsthead``).
+    Supports:
+    - make_longtable(col_spec, caption, header_rows, body, ...)
+    - make_longtable(col_spec, num_cols, caption, header_rows, body, ...)
+    - make_longtable(col_spec=..., num_cols=..., caption=..., header_rows=..., body=...)
     """
+    if isinstance(caption, int):
+        num_cols = caption
+        caption = header_rows
+        header_rows = body
+        body = kwargs.get("body", "")
+
+    if caption is None and "caption" in kwargs:
+        caption = kwargs["caption"]
+    if header_rows is None and "header_rows" in kwargs:
+        header_rows = kwargs["header_rows"]
+    if not body and "body" in kwargs:
+        body = kwargs["body"]
+    if num_cols is None and "num_cols" in kwargs:
+        num_cols = kwargs["num_cols"]
+
+    if num_cols is None:
+        if header_rows and len(header_rows) > 0:
+            num_cols = header_rows[0].count("&") + 1
+        else:
+            num_cols = 2
+
+    header_rows = header_rows or []
+    caption = caption or ""
+
     header_block = "\n".join(h + header_row_end for h in header_rows)
     lines = [
         r"\begin{longtable}{" + col_spec + r"}",
-        r"\caption{" + caption + r"}",
+        r"\caption{" + caption + r"} \\",
     ]
     if pre:
         lines.append(pre)
@@ -46,11 +54,26 @@ def make_longtable(col_spec, caption, header_rows, body, *,
     
     if repeat_header is not False:
         if repeat_header is None or repeat_header is True:
-            rh = "\n".join(part for part in (pre, header_block, post) if part)
+            rh_parts = [p for p in (pre, header_block, post) if p]
+            lines.append("\n".join(rh_parts))
         else:
-            rh = repeat_header
-        lines.append(rh)
+            cont = str(repeat_header).strip()
+            if cont:
+                if not cont.endswith(r"\\") and r"\multicolumn" in cont:
+                    cont += r" \\"
+                lines.append(cont)
+            if pre:
+                lines.append(pre)
+            lines.append(header_block)
+            if post:
+                lines.append(post)
         lines.append(r"\endhead")
+        
+    lines.append(r"\hline")
+    lines.append(r"\endfoot")
+    
+    lines.append(r"\hline")
+    lines.append(r"\endlastfoot")
 
     if body:
         lines.append(body)

@@ -17,6 +17,7 @@ from .document import (
     DocumentComponent,
     Figure,
     RawLatex,
+    Math,
     ReportDocument,
     Section,
     Table,
@@ -44,6 +45,10 @@ class LatexRenderer:
         parts.append(r"\end{document}")
         return "\n".join(parts)
 
+    def render_chapter(self, chapter: Chapter) -> str:
+        """Render a single semantic Chapter into a LaTeX string."""
+        return self._render_chapter(chapter)
+
     # ------------------------------------------------------------------
     # Formatting helpers  (renderer owns all presentation)
     # ------------------------------------------------------------------
@@ -68,19 +73,17 @@ class LatexRenderer:
             return fallback
         return str(v)
 
-    def fmt_status(self, status: CheckStatus) -> str:
-        """Format a CheckStatus for LaTeX output."""
-        _map = {
-            CheckStatus.PASS: "PASS",
-            CheckStatus.WARN: r"\textcolor{orange}{WARN}",
-            CheckStatus.FAIL: r"\textcolor{red}{FAIL}",
-            CheckStatus.UNAVAILABLE: "---",
-        }
-        return _map.get(status, "---")
 
-    # ------------------------------------------------------------------
-    # Document tree
-    # ------------------------------------------------------------------
+    def render_chapter(self, ch: Chapter) -> str:
+        """Render a single semantic Chapter AST component into LaTeX."""
+        return self._render_chapter(ch)
+
+    def render_document(self, doc: ReportDocument) -> str:
+        """Render a full ReportDocument AST into LaTeX."""
+        parts = []
+        for ch in doc.chapters:
+            parts.append(self._render_chapter(ch))
+        return "\n\n".join(parts)
 
     def _render_chapter(self, ch: Chapter) -> str:
         lines = [f"\\chapter{{{ch.title}}}"]
@@ -90,18 +93,28 @@ class LatexRenderer:
 
     def _render_section(self, sec: Section) -> str:
         cmd = {2: "section", 3: "subsection"}.get(sec.level, "section")
-        lines = [f"\\{cmd}{{{sec.title}}}"]
+        hints = getattr(sec, "layout", None)
+        is_landscape = hints and getattr(hints, "orientation", "portrait") == "landscape"
+        lines = []
+        if is_landscape:
+            lines.append(r"\begin{osdaglandscape}")
+        if sec.title:
+            lines.append(f"\\{cmd}{{{sec.title}}}")
         for comp in sec.components:
-            lines.append(self._render_component(comp))
+            lines.append(self._render_component(comp, in_landscape=is_landscape))
+        if is_landscape:
+            lines.append(r"\end{osdaglandscape}")
         return "\n".join(lines)
 
-    def _render_component(self, comp: DocumentComponent) -> str:
+    def _render_component(self, comp: DocumentComponent, in_landscape: bool = False) -> str:
+        from .document import Paragraph
         dispatch = {
-            Table: self._render_table,
+            Table: lambda c: self._render_table(c, in_landscape=in_landscape),
             Chart: self._render_chart,
             Figure: self._render_figure,
             Callout: self._render_callout,
-            RawLatex: lambda c: c.content,
+            Paragraph: self._render_paragraph,
+            RawLatex: self._render_raw_latex,
         }
         renderer = dispatch.get(type(comp))
         if renderer is None:
@@ -112,44 +125,92 @@ class LatexRenderer:
     # Component renderers
     # ------------------------------------------------------------------
 
-    def _render_table(self, table: Table) -> str:
+    def _render_paragraph(self, comp: Any) -> str:
+        content = self._escape(comp.text) if isinstance(comp.text, (list, tuple)) else self._escape(str(comp.text))
+        return f"\n{content}\n"
+
+    def _render_raw_latex(self, comp: RawLatex) -> str:
+        if isinstance(comp.content, (list, tuple)):
+            parts = []
+            for part in comp.content:
+                if isinstance(part, Math):
+                    parts.append(f"${part.content}$")
+                else:
+                    parts.append(str(part))
+            return "".join(parts)
+        return str(comp.content)
+
+    def _render_table(self, table: Table, in_landscape: bool = False) -> str:
         from ..reports.table_utils import make_longtable
 
         hints = table.layout
+        ts = self._theme.table_styles.get(hints.style, self._theme.table_styles["default"])
+        
         parts: list[str] = []
+        table_landscape = getattr(hints, "orientation", "portrait") == "landscape"
+        wrap_landscape = table_landscape and not in_landscape
 
-        # If splittable is False and we want to keep together, we could use minipage,
-        # but longtable doesn't work well in minipage. Using Needspace is safer.
-        # But we'll just respect minimum_bottom_clearance_lines.
+        if wrap_landscape:
+            parts.append(r"\begin{osdaglandscape}")
+
         if hints.minimum_bottom_clearance_lines > 0:
             parts.append(
                 f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}"
             )
         elif hints.keep_caption_with_table:
-            # Provide at least some Needspace if we want caption to stay with body
             parts.append(r"\Needspace{4\baselineskip}")
 
-        # Build column spec from columns
+        has_custom_style = (
+            ts.font_size != "normalsize"
+            or ts.row_height_factor != 1.15
+            or ts.column_padding_pt != 6
+        )
+        if has_custom_style:
+            parts.append(r"\begingroup")
+            if ts.font_size != "normalsize":
+                parts.append(f"\\{ts.font_size}")
+            if ts.row_height_factor != 1.15:
+                parts.append(f"\\renewcommand{{\\arraystretch}}{{{ts.row_height_factor}}}")
+            if ts.column_padding_pt != 6:
+                parts.append(f"\\setlength{{\\tabcolsep}}{{{ts.column_padding_pt}pt}}")
+
         col_spec = self._build_col_spec(table)
-
-        # Build header row from columns
         header = self._build_header_row(table)
-
-        # Build body from semantic rows or groups
         body = self._build_body(table)
 
         pre = r"\hline" if hints.keep_caption_with_table else ""
+        
+        # Apply caption font weight if bold
+        cap_weight = r"\textbf{" if self._theme.typography.caption_font_weight == "bold" else ""
+        cap_close = r"}" if cap_weight else ""
+        formatted_caption = f"{cap_weight}{table.caption}{cap_close}"
+        
+        plain_cap = table.caption.replace(r"\textbf{", "").replace("}", "") if r"\textbf{" in table.caption else table.caption
+        cont_cap = r"\multicolumn{" + str(max(1, len(table.columns))) + r"}{c}{\textit{" + plain_cap + r" (continued)}} \\"
+        rh = cont_cap if hints.repeat_header else False
+
         parts.append(
             make_longtable(
                 col_spec=col_spec,
-                caption=table.caption,
+                num_cols=max(1, len(table.columns)),
+                caption=formatted_caption,
                 header_rows=[header],
                 body=body,
                 pre=pre,
                 post=r"\hline",
-                repeat_header=hints.repeat_header,
+                repeat_header=rh,
             )
         )
+        
+        if getattr(table, "note", None):
+            note_esc = self._escape(table.note)
+            parts.append(r"\par\vspace{-2mm}\noindent{\small\textit{Note: " + note_esc + r"}}\par\vspace{1em}")
+
+        if has_custom_style:
+            parts.append(r"\endgroup")
+
+        if wrap_landscape:
+            parts.append(r"\end{osdaglandscape}")
 
         if hints.space_after_mm > 0:
             parts.append(f"\\vspace{{{hints.space_after_mm}mm}}")
@@ -157,17 +218,14 @@ class LatexRenderer:
         return "\n".join(parts)
 
     def _build_col_spec(self, table: Table) -> str:
-        """Build a LaTeX column spec string from Table.columns."""
-        if table.columns:
-            # Use explicit widths if provided, otherwise default to left-aligned
-            specs = []
-            for col in table.columns:
-                if col.width:
-                    specs.append(col.width)
-                else:
-                    specs.append("l")
-            return "|" + "|".join(specs) + "|"
-        return "l"
+        """Derive column specification from table headers and widths."""
+        col_types = []
+        for col in table.columns:
+            if col.width:
+                col_types.append(col.width)
+            else:
+                col_types.append("l")
+        return "|" + "|".join(col_types) + "|"
 
     def _build_header_row(self, table: Table) -> str:
         """Build the header row LaTeX from Table.columns."""
@@ -175,78 +233,152 @@ class LatexRenderer:
         return " & ".join(cells)
 
     def _build_body(self, table: Table) -> str:
-        """Build the table body LaTeX from Table.rows or Table.groups."""
-        if table.groups:
+        """Dispatch to flat or grouped row builders."""
+        if table.groups is not None:
             return self._build_grouped_body(table)
         lines = []
-        for row in (table.rows or []):
-            cells = [self._escape(cell) for cell in row]
-            lines.append(" & ".join(cells) + r" \\")
+        rows = table.rows or []
+        n_cols = len(table.columns)
+        for i, row in enumerate(rows):
+            # Check if this row is a spanning category subheader (e.g. in Table 5.23)
+            if len(row) > 1 and all(c == "" or c is None for c in row[1:]):
+                hdr_text = self._escape(row[0])
+                lines.append(r"\multicolumn{" + str(n_cols) + r"}{|l|}{\textbf{" + hdr_text + r"}} \\")
+            else:
+                cells = [self._escape(cell) for cell in row]
+                lines.append(" & ".join(cells) + r" \\")
+            if i < len(rows) - 1:
+                lines.append(r"\noalign{\penalty0}\hline")
         return "\n".join(lines)
 
     def _build_grouped_body(self, table: Table) -> str:
-        """Build body with \\multirow for TableGroup labels.
-
-        For each group, the group label spans all rows in the first column.
-        Subsequent rows have an empty first cell (the \\multirow covers them).
-        """
+        """Build body for grouped tables, handling splittable vs non-splittable."""
         if not table.groups:
             return ""
         lines = []
+        is_splittable = table.layout.splittable
+        n_cols = len(table.columns)
+        
         for group_idx, group in enumerate(table.groups):
             n_rows = len(group.rows)
             label_esc = self._escape(group.label)
             for row_idx, row in enumerate(group.rows):
                 cells = [self._escape(cell) for cell in row]
-                if row_idx == 0 and n_rows > 1:
-                    first_cell = (
-                        r"\multirow{" + str(n_rows) + r"}{*}{\makecell{"
-                        + label_esc + r"}}"
-                    )
-                elif row_idx == 0:
-                    first_cell = label_esc
+                
+                if row_idx == 0:
+                    if is_splittable:
+                        first_cell = label_esc
+                    else:
+                        first_cell = (
+                            r"\multirow{" + str(n_rows) + r"}{*}{\makecell{"
+                            + label_esc + r"}}"
+                        ) if n_rows > 1 else label_esc
                 else:
                     first_cell = ""
                 
                 cells.insert(0, first_cell)
-                lines.append(" & ".join(cells) + r" \\[6pt]")
-                if row_idx < n_rows - 1:
-                    lines.append(r"\cline{2-" + str(len(table.columns)) + "}")
-            lines.append(r"\hline")
+                lines.append(" & ".join(cells) + r" \\")
+            
+            # Add a full horizontal rule under the group label if this is not the last group
+            if group_idx < len(table.groups) - 1:
+                lines.append(r"\noalign{\penalty0}\hline")
+                
         return "\n".join(lines)
 
-    def _escape(self, text: str) -> str:
+    def _escape(self, text: Any) -> str:
         """Escape a plain-text value for safe LaTeX embedding.
 
         This is the renderer's responsibility — chapter builders never
         write LaTeX syntax for table data.
         """
+        # Apply visual policy for statuses natively
+        if isinstance(text, CheckStatus):
+            if text == CheckStatus.FAIL:
+                return r"\textcolor{error}{FAIL}"
+            if text == CheckStatus.WARN:
+                return r"\textcolor{accent}{WARN}"
+            if text == CheckStatus.PASS:
+                return "PASS"
+            return "---"
+            
+        if isinstance(text, Math):
+            return f"${text.content}$"
+            
+        if isinstance(text, (list, tuple)):
+            return "".join(self._escape(part) for part in text if part is not None)
+        
+        text_str = str(text) if text is not None else ""
+        
+        # Pre-process unicode symbols to protect them from `_tex` and escape to math mode
+        unicode_map = {
+            "≤": r"$\leq$",
+            "≥": r"$\geq$",
+            "×": r"$\times$",
+            "±": r"$\pm$",
+            "°": r"$^\circ$",
+            "–": "--",    # en-dash
+            "—": "---",   # em-dash
+            "−": "-",     # minus sign
+            "→": r"$\rightarrow$",
+            "·": r"$\cdot$",
+            "²": r"$^2$",
+            "³": r"$^3$",
+            "⁴": r"$^4$",
+            "Ø": r"$\emptyset$",
+            "α": r"$\alpha$",
+            "γ": r"$\gamma$",
+            "ε": r"$\epsilon$",
+            "λ": r"$\lambda$",
+            "ρ": r"$\rho$",
+            "σ": r"$\sigma$",
+            "τ": r"$\tau$",
+            "χ": r"$\chi$"
+        }
+        
+        # Hide characters from _tex using a placeholder
+        for uni in unicode_map:
+            text_str = text_str.replace(uni, f"ZUNIQ{ord(uni)}ZZ")
+            
         from osdagbridge.core.reports.report_utils import _tex
-        return _tex(text)
+        escaped = _tex(text_str)
+        
+        # Restore as LaTeX safe
+        for uni, latex_code in unicode_map.items():
+            escaped = escaped.replace(f"ZUNIQ{ord(uni)}ZZ", latex_code)
+            
+        return escaped
 
     def _render_chart(self, chart: Chart) -> str:
         from .chart_generators import generate_chart
 
         path = generate_chart(chart, self._theme)
+        if path:
+            path = path.replace("\\", "/")
         hints = chart.layout
         parts = []
         
         if hints.minimum_bottom_clearance_lines > 0:
             parts.append(f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}")
             
+        cap_weight = r"\textbf{" if self._theme.typography.caption_font_weight == "bold" else ""
+        cap_close = r"}" if cap_weight else ""
+            
+        width_val = chart.width_cm if chart.width_cm is not None else self._theme.charts.get("default", self._theme.charts["default"]).width_cm
+        width_str = f"{width_val}cm"
+
         parts.append(
             r"\begin{figure}[H]"
             + "\n"
             + r"\centering"
             + "\n"
             + r"\includegraphics[width="
-            + str(self._theme.chart.width_cm)
-            + r"cm]{"
+            + width_str
+            + r"]{"
             + path
             + "}"
             + "\n"
             + r"\caption*{\small "
-            + chart.title
+            + cap_weight + chart.title + cap_close
             + "}"
             + "\n"
             + r"\end{figure}"
@@ -263,6 +395,9 @@ class LatexRenderer:
         if hints.minimum_bottom_clearance_lines > 0:
             parts.append(f"\\Needspace{{{hints.minimum_bottom_clearance_lines}\\baselineskip}}")
             
+        cap_weight = r"\textbf{" if self._theme.typography.caption_font_weight == "bold" else ""
+        cap_close = r"}" if cap_weight else ""
+            
         if figure.path:
             p = figure.path.replace("\\", "/")
             parts.append(
@@ -277,15 +412,14 @@ class LatexRenderer:
                 + "}"
                 + "\n"
                 + r"\caption*{\small "
-                + figure.caption
+                + cap_weight + figure.caption + cap_close
                 + "}"
                 + "\n"
                 + r"\end{figure}"
             )
         else:
-            # Placeholder when no image is available.
             parts.append(
-                r"\noindent\fbox{\parbox{0.97\textwidth}{"
+                r"\noindent\fbox{\parbox{1.0\textwidth}{"
                 r"\textit{[ PLACEHOLDER: "
                 + figure.caption
                 + " ]}}}"
@@ -306,7 +440,11 @@ class LatexRenderer:
             
         env_map = {"note": "remark", "warning": "warning", "info": "info"}
         env = env_map.get(callout.callout_type, "remark")
-        parts.append(f"\\begin{{{env}}}\n{callout.text}\n\\end{{{env}}}")
+        
+        # Render the text content, which can now be a list of semantic elements
+        content = self._escape(callout.text) if isinstance(callout.text, (list, tuple)) else str(callout.text)
+        
+        parts.append(f"\\begin{{{env}}}\n{content}\n\\end{{{env}}}")
         
         if hints.keep_together:
             parts.append(r"\end{minipage}")
