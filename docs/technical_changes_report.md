@@ -58,7 +58,7 @@ The subsystem has been re-architected into a **10-Tier Semantic Report Engine**.
 | **Core Requirement 4** | Utilization Ratio Visualizations | **Completed** | **Figure 5.1** summary chart with $\text{UR}=1.0$ red dashed code threshold line. |
 | **Core Requirement 5** | Material Take-off Bar Charts | **Completed** | **Figures 7.1, 7.2, 7.3** for Steel, Concrete, and Rebar with sequential numbering. |
 | **Core Requirement 6** | Centralized Theme System | **Completed** | Dedicated `theme.py` acting as single source of truth for all layout/color rules. |
-| **Additional Enhancement** | Multi-Girder Scalability | **Enhanced** | Verticalized Table 1 (5 columns), scaling across tested 3, 5, 9, 10-girder models. |
+| **Additional Enhancement** | Multi-Girder Scalability | **Enhanced** | Verticalized Table 1 (5 columns), scaling across tested 3-, 5-, and 10-girder models. |
 | **Additional Enhancement** | Grouped Table Aesthetics | **Enhanced** | Subtle `\cline{2-N}` inner parameter dividers with full `\hline` group boundaries. |
 | **Additional Enhancement** | \LaTeX\ Math AST Protection | **Enhanced** | AST `Math(...)` token isolation eliminating `¿` font artifacts and raw \TeX\ leaks. |
 | **Additional Enhancement** | Preflight Safety Tripwires | **Enhanced** | Post-compilation automated physical PDF margin and footer collision detection. |
