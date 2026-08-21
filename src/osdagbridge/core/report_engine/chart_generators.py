@@ -82,10 +82,8 @@ def generate_chart(
         for v in vals:
             if np.isnan(v):
                 colors.append(palette.unavailable)
-            elif chart.threshold_line is not None and v > chart.threshold_line:
-                colors.append(palette.error)
             else:
-                colors.append(palette.success)
+                colors.append(palette.primary)
 
         plot_vals = [0.0 if np.isnan(v) else v for v in vals]
         bars = ax.barh(keys, plot_vals, color=colors, height=0.55, zorder=3, edgecolor=palette.surface, linewidth=1.0)
