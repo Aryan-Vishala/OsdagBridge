@@ -382,7 +382,7 @@ class TestBuildChapter7:
         assert charts[1].title == "Concrete Volume"
         assert "Concrete Deck Slab" in charts[1].data
         
-        assert charts[2].title == "Reinforcement Steel"
+        assert charts[2].title == "Reinforcement Steel Quantity"
         assert "Reinforcement Steel" in charts[2].data
 
     def test_charts_handle_missing_end_diaphragm(self):

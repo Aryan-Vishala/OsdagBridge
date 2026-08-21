@@ -81,22 +81,24 @@ def generate_chart(
         colors = []
         for v in vals:
             if np.isnan(v):
-                colors.append(palette.muted)
+                colors.append(palette.unavailable)
             elif chart.threshold_line is not None and v > chart.threshold_line:
                 colors.append(palette.error)
             else:
                 colors.append(palette.success)
 
-        bars = ax.barh(keys, vals, color=colors, height=0.55, zorder=3, edgecolor=palette.surface, linewidth=1.0)
+        plot_vals = [0.0 if np.isnan(v) else v for v in vals]
+        bars = ax.barh(keys, plot_vals, color=colors, height=0.55, zorder=3, edgecolor=palette.surface, linewidth=1.0)
         
         # Add numeric labels and PASS/FAIL
-        max_val = max([v for v in vals if not np.isnan(v)] + [1.0])
+        valid_vals = [v for v in vals if not np.isnan(v)]
+        max_val = max(valid_vals + [1.0]) if valid_vals else 1.0
         for idx, (bar, original_val) in enumerate(zip(bars, vals)):
             y_pos = bar.get_y() + bar.get_height() / 2
             if np.isnan(original_val):
                 ax.text(
                     0.03, y_pos, "N/A (Not Designed / Optional)",
-                    va='center', ha='left', color=palette.muted,
+                    va='center', ha='left', color=palette.unavailable,
                     fontsize=9.5, fontstyle='italic', zorder=5
                 )
             else:
@@ -121,7 +123,7 @@ def generate_chart(
         if chart.threshold_line is not None:
             ax.axvline(
                 x=chart.threshold_line,
-                color=palette.error,
+                color=palette.threshold,
                 linestyle='--',
                 linewidth=1.8,
                 zorder=4,
@@ -138,19 +140,34 @@ def generate_chart(
             )
 
     else:
-        # Vertical bar charts (Chapter 7 Material Quantities)
+        # Vertical bar charts (Chapter 7 Material Quantities & general metrics)
         raw_keys = list(chart.data.keys())
         vals = [chart.data[k] if chart.data[k] is not None else np.nan for k in raw_keys]
         
-        # Palette selection
-        if chart.colors and len(chart.colors) >= len(raw_keys):
-            bar_colors = chart.colors[:len(raw_keys)]
-        else:
-            default_palette = [palette.steel, palette.concrete, palette.rebar, palette.primary, palette.secondary]
-            bar_colors = default_palette[:len(raw_keys)]
+        # Color mapping strictly derived from theme.colors
+        bar_colors = []
+        for k, v in zip(raw_keys, vals):
+            k_lower = k.lower()
+            if np.isnan(v):
+                bar_colors.append(palette.unavailable)
+            elif "girder" in k_lower or "steel" in k_lower and "reinforce" not in k_lower and "rebar" not in k_lower:
+                bar_colors.append(palette.structural_steel)
+            elif "cross bracing" in k_lower:
+                bar_colors.append(palette.accent)
+            elif "end diaphragm" in k_lower:
+                bar_colors.append(palette.secondary)
+            elif "concrete" in k_lower:
+                bar_colors.append(palette.concrete)
+            elif "reinforce" in k_lower or "rebar" in k_lower:
+                bar_colors.append(palette.reinforcement)
+            else:
+                fallback_seq = [palette.structural_steel, palette.accent, palette.concrete, palette.reinforcement, palette.secondary]
+                idx = len(bar_colors) % len(fallback_seq)
+                bar_colors.append(fallback_seq[idx])
 
         bar_width = 0.45 if len(raw_keys) <= 3 else 0.6
-        bars = ax.bar(raw_keys, vals, color=bar_colors, width=bar_width, zorder=3, edgecolor=palette.surface, linewidth=1.2)
+        plot_vals = [0.0 if np.isnan(v) else v for v in vals]
+        bars = ax.bar(raw_keys, plot_vals, color=bar_colors, width=bar_width, zorder=3, edgecolor=palette.surface, linewidth=1.2)
         
         # Subtle horizontal grid
         ax.yaxis.grid(True, linestyle='--', color=palette.grid, linewidth=0.8, alpha=0.8, zorder=0)
@@ -166,9 +183,9 @@ def generate_chart(
             x_pos = bar.get_x() + bar.get_width() / 2
             if np.isnan(original_val):
                 ax.text(
-                    x_pos, 0.05 * max_y, "N/A",
-                    ha='center', va='bottom', color=palette.muted,
-                    fontsize=9, fontstyle='italic', zorder=5
+                    x_pos, 0.04 * max_y if max_y > 0 else 0.5, "N/A",
+                    ha='center', va='bottom', color=palette.unavailable,
+                    fontsize=9.5, fontweight='bold', fontstyle='italic', zorder=5
                 )
             else:
                 val_str = f"{original_val:.2f}"
@@ -179,13 +196,13 @@ def generate_chart(
                     x_pos, original_val + (max_y * 0.02),
                     label_text,
                     ha='center', va='bottom', color=palette.secondary,
-                    fontsize=9, fontweight='bold', zorder=5
+                    fontsize=9.5, fontweight='bold', zorder=5
                 )
 
         if chart.threshold_line is not None:
             ax.axhline(
                 y=chart.threshold_line,
-                color=palette.error,
+                color=palette.threshold,
                 linestyle='--',
                 linewidth=1.8,
                 zorder=4,

@@ -408,8 +408,8 @@ class LatexRenderer:
             + path
             + "}"
             + "\n"
-            + r"\caption*{\small "
-            + cap_weight + chart.title + cap_close
+            + r"\caption{"
+            + cap_weight + self._escape(chart.title) + cap_close
             + "}"
             + "\n"
             + r"\end{figure}"

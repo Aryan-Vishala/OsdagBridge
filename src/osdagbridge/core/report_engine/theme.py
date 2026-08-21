@@ -67,6 +67,22 @@ class ColorPalette:
     grid: str = "#E2E8F0"           # Subtle Grid Line
     surface: str = "#FFFFFF"        # Chart Surface Background
 
+    @property
+    def structural_steel(self) -> str:
+        return self.steel
+
+    @property
+    def reinforcement(self) -> str:
+        return self.rebar
+
+    @property
+    def unavailable(self) -> str:
+        return self.muted
+
+    @property
+    def threshold(self) -> str:
+        return self.error
+
 
 @dataclass(frozen=True)
 class SpacingStyle:

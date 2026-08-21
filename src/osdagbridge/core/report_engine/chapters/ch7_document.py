@@ -138,9 +138,8 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
             "End Diaphragms": ed_wt
         },
         y_label="Weight (MT)",
-        colors=["#1E293B", "#2563EB", "#0284C7"],
         width_cm=14.5,
-        height_cm=5.6,
+        height_cm=5.5,
     )
     charts.append(chart_steel)
 
@@ -153,24 +152,22 @@ def _build_charts(facts: MaterialFacts) -> list[Chart]:
             "Concrete Deck Slab": concrete_vol
         },
         y_label="Volume (m³)",
-        colors=["#0D9488"],
         width_cm=14.5,
-        height_cm=5.2,
+        height_cm=5.5,
     )
     charts.append(chart_concrete)
 
-    # 3. Reinforcement Steel (MT)
+    # 3. Reinforcement Steel Quantity (MT)
     rebar_wt = facts.reinforcement_steel.total_weight.value if facts.reinforcement_steel and facts.reinforcement_steel.total_weight else None
     chart_rebar = Chart(
-        title="Reinforcement Steel",
+        title="Reinforcement Steel Quantity",
         chart_type="bar",
         data={
             "Reinforcement Steel": rebar_wt
         },
         y_label="Weight (MT)",
-        colors=["#D97706"],
         width_cm=14.5,
-        height_cm=5.2,
+        height_cm=5.5,
     )
     charts.append(chart_rebar)
 

@@ -55,6 +55,10 @@ class TestColorPalette:
         assert cp.steel == "#2563EB"
         assert cp.concrete == "#0D9488"
         assert cp.rebar == "#D97706"
+        assert cp.structural_steel == "#2563EB"
+        assert cp.reinforcement == "#D97706"
+        assert cp.unavailable == "#94A3B8"
+        assert cp.threshold == "#DC2626"
 
 
 class TestReportTheme:
