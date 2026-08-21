@@ -139,8 +139,15 @@ class PDFPreflight:
             collision_found = False
             collision_page = 0
             
+            overflow_found = False
+            overflow_page = 0
+            margin_right_pt = 15 * MM_TO_PT
+
             for page_num in range(len(doc)):
                 page = doc[page_num]
+                w = page.rect.width
+                h = page.rect.height
+                max_x = w - margin_right_pt
                 blocks = page.get_text("blocks")
                 
                 # Exclude obvious footer text like page numbers
@@ -151,6 +158,10 @@ class PDFPreflight:
                     if block_type != 0:
                         continue
                         
+                    # Ignore running headers (y < 40) or footers (y > h - 40)
+                    if y0 < 40 or y1 > h - 40:
+                        continue
+
                     # If this block is entirely in the footer zone and looks like a page number, ignore it
                     if y0 >= max_allowed_body_y:
                         text_stripped = text.strip()
@@ -161,9 +172,13 @@ class PDFPreflight:
                     if y1 > max_allowed_body_y:
                         collision_found = True
                         collision_page = page_num + 1
-                        break
+                        
+                    # Any block whose right X goes beyond printable region is a horizontal overflow
+                    if x1 > max_x + 5.0:
+                        overflow_found = True
+                        overflow_page = page_num + 1
                             
-                if collision_found:
+                if collision_found and overflow_found:
                     break
                     
             if collision_found:
@@ -178,10 +193,27 @@ class PDFPreflight:
                     status=PreflightStatus.PASS,
                     message="No body content entered footer reserve."
                 ))
+
+            if overflow_found:
+                checks.append(PreflightCheck(
+                    check_name="Horizontal Margin Overflow",
+                    status=PreflightStatus.FAIL,
+                    message=f"Table or body content exceeded page width margins on page {overflow_page}."
+                ))
+            else:
+                checks.append(PreflightCheck(
+                    check_name="Horizontal Margin Overflow",
+                    status=PreflightStatus.PASS,
+                    message="All tables and content remain strictly within printable horizontal margins."
+                ))
+
             doc.close()
         except ImportError:
             checks.append(PreflightCheck(
                 "Footer Collision", PreflightStatus.WARN, "PyMuPDF (fitz) not installed, cannot verify layout."
+            ))
+            checks.append(PreflightCheck(
+                "Horizontal Margin Overflow", PreflightStatus.WARN, "PyMuPDF (fitz) not installed, cannot verify layout."
             ))
         except Exception as e:
             checks.append(PreflightCheck(

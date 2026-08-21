@@ -104,9 +104,14 @@ class TestPDFPreflight:
             def __init__(self, x0, y0, x1, y1, text, btype):
                 self.bbox = (x0, y0, x1, y1, text, btype, 0)
                 
+        class MockRect:
+            width = 595.28
+            height = 841.89
+
         class MockPage:
             def __init__(self, blocks):
                 self.blocks = [b.bbox for b in blocks]
+                self.rect = MockRect()
             def get_text(self, mode):
                 return self.blocks
                 
@@ -124,20 +129,25 @@ class TestPDFPreflight:
         # margin_bottom = 25 * 2.83465 = 70.86 pt
         # max_allowed_body_y = 841.89 - 70.86 = 771.02 pt
         
-        # Safe body: y1 = 700 (well above 771.02)
-        safe_page = MockPage([MockBlock(0, 600, 100, 700, "Safe text", 0)])
+        # Safe body: y1 = 700 (well above 771.02), x1 = 400 (well within width 595.28)
+        safe_page = MockPage([MockBlock(50, 600, 400, 700, "Safe text", 0)])
         
         # Footer text: y0 = 800 (starts in footer), is just a number
         footer_page = MockPage([MockBlock(100, 800, 120, 810, " 30 ", 0)])
         
         # Collision: y1 = 780 (crosses into footer)
-        collision_page = MockPage([MockBlock(0, 750, 100, 780, "Too long table row", 0)])
+        collision_page = MockPage([MockBlock(50, 750, 400, 780, "Too long table row", 0)])
+        
+        # Horizontal overflow: x1 = 580 (crosses right margin 595.28 - 42.5 = 552.78)
+        overflow_page = MockPage([MockBlock(50, 200, 580, 250, "Extremely wide table cell extending beyond right margin", 0)])
         
         def mock_open(path):
             if "safe.pdf" in path:
                 return MockDoc([safe_page])
             elif "footer.pdf" in path:
                 return MockDoc([safe_page, footer_page])
+            elif "overflow.pdf" in path:
+                return MockDoc([safe_page, overflow_page])
             else:
                 return MockDoc([safe_page, collision_page])
                 
@@ -150,6 +160,7 @@ class TestPDFPreflight:
         # Test safe
         pf_safe = PDFPreflight(facts, doc, "safe.pdf")
         assert next(c for c in pf_safe.run().checks if c.check_name == "Footer Collision").status == PreflightStatus.PASS
+        assert next(c for c in pf_safe.run().checks if c.check_name == "Horizontal Margin Overflow").status == PreflightStatus.PASS
         
         # Test footer ignored
         pf_footer = PDFPreflight(facts, doc, "footer.pdf")
@@ -158,3 +169,7 @@ class TestPDFPreflight:
         # Test collision
         pf_collision = PDFPreflight(facts, doc, "collision.pdf")
         assert next(c for c in pf_collision.run().checks if c.check_name == "Footer Collision").status == PreflightStatus.FAIL
+
+        # Test horizontal overflow
+        pf_overflow = PDFPreflight(facts, doc, "overflow.pdf")
+        assert next(c for c in pf_overflow.run().checks if c.check_name == "Horizontal Margin Overflow").status == PreflightStatus.FAIL
