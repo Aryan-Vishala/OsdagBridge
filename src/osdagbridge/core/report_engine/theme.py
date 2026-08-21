@@ -57,8 +57,8 @@ class ColorPalette:
     primary_dark: str = "#5C720D"   # Deep Forest Brand Accent
     secondary: str = "#1E293B"      # Deep Slate / Structural Navy
     steel: str = "#91B014"          # Structural Steel (Osdag Brand Green)
-    concrete: str = "#1E293B"       # Concrete (Deep Slate Navy)
-    rebar: str = "#0284C7"          # Reinforcement Steel (Technical Blue Accent)
+    concrete: str = "#91B014"       # Concrete (Osdag Brand Green)
+    rebar: str = "#91B014"          # Reinforcement Steel (Osdag Brand Green)
     accent: str = "#0284C7"         # Technical Blue Accent
     error: str = "#DC2626"          # Code Failure Red
     success: str = "#16A34A"        # Code Pass Green
@@ -69,11 +69,11 @@ class ColorPalette:
 
     @property
     def structural_steel(self) -> str:
-        return self.steel
+        return self.primary
 
     @property
     def reinforcement(self) -> str:
-        return self.rebar
+        return self.primary
 
     @property
     def unavailable(self) -> str:

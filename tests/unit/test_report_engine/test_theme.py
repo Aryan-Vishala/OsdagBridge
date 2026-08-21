@@ -53,10 +53,10 @@ class TestColorPalette:
         assert cp.secondary == "#1E293B"
         assert cp.accent == "#0284C7"
         assert cp.steel == "#91B014"
-        assert cp.concrete == "#1E293B"
-        assert cp.rebar == "#0284C7"
+        assert cp.concrete == "#91B014"
+        assert cp.rebar == "#91B014"
         assert cp.structural_steel == "#91B014"
-        assert cp.reinforcement == "#0284C7"
+        assert cp.reinforcement == "#91B014"
         assert cp.unavailable == "#94A3B8"
         assert cp.threshold == "#DC2626"
 

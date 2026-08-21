@@ -144,26 +144,13 @@ def generate_chart(
         raw_keys = list(chart.data.keys())
         vals = [chart.data[k] if chart.data[k] is not None else np.nan for k in raw_keys]
         
-        # Color mapping strictly derived from theme.colors
+        # Uniform brand color for all material bars, neutral gray for N/A
         bar_colors = []
         for k, v in zip(raw_keys, vals):
-            k_lower = k.lower()
             if np.isnan(v):
                 bar_colors.append(palette.unavailable)
-            elif "girder" in k_lower or "steel" in k_lower and "reinforce" not in k_lower and "rebar" not in k_lower:
-                bar_colors.append(palette.structural_steel)
-            elif "cross bracing" in k_lower:
-                bar_colors.append(palette.accent)
-            elif "end diaphragm" in k_lower:
-                bar_colors.append(palette.secondary)
-            elif "concrete" in k_lower:
-                bar_colors.append(palette.concrete)
-            elif "reinforce" in k_lower or "rebar" in k_lower:
-                bar_colors.append(palette.reinforcement)
             else:
-                fallback_seq = [palette.structural_steel, palette.accent, palette.concrete, palette.reinforcement, palette.secondary]
-                idx = len(bar_colors) % len(fallback_seq)
-                bar_colors.append(fallback_seq[idx])
+                bar_colors.append(palette.primary)
 
         bar_width = 0.45 if len(raw_keys) <= 3 else 0.6
         plot_vals = [0.0 if np.isnan(v) else v for v in vals]
