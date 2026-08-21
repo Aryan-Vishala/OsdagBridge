@@ -165,17 +165,24 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def preamble(project_name, job_number, report_date, report_version='Rev 0'):
-    pn = _tex(project_name)
-    jn = _tex(job_number)
-    rd = _tex(report_date)
-    rv = _tex(report_version)
+    pn = _tex(project_name).strip()
+    jn = _tex(job_number).strip()
+    rd = _tex(report_date).strip()
+    rv = _tex(report_version).strip()
+
+    left_parts = [p for p in [pn, jn] if p]
+    right_parts = [p for p in [rd, rv] if p]
+
+    left_head = " $|$ ".join(left_parts) if left_parts else ""
+    right_head = " $|$ ".join(right_parts) if right_parts else ""
+
     return r"""
 \documentclass[12pt,a4paper]{report}
 
 % Packages
-\usepackage[a4paper, margin=1in, headheight=14pt, footskip=12mm]{geometry}
+\usepackage[a4paper, margin=1in, headheight=15pt, footskip=12mm]{geometry}
 \savegeometry{portrait}
-\geometry{a4paper, landscape, top=18mm, bottom=22mm, left=20mm, right=20mm, footskip=12mm, headheight=14pt}
+\geometry{a4paper, landscape, top=18mm, bottom=22mm, left=20mm, right=20mm, footskip=12mm, headheight=15pt}
 \savegeometry{landscape}
 \loadgeometry{portrait}
 
@@ -232,8 +239,8 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 \fancypagestyle{main}{
   \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
+  \fancyhead[L]{""" + left_head + r"""}
+  \fancyhead[R]{""" + right_head + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
   \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
@@ -250,8 +257,8 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 }
 \fancypagestyle{plain}{
   \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
+  \fancyhead[L]{""" + left_head + r"""}
+  \fancyhead[R]{""" + right_head + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
   \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
@@ -268,8 +275,8 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 }
 \fancypagestyle{osdaglandscape}{
   \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
+  \fancyhead[L]{""" + left_head + r"""}
+  \fancyhead[R]{""" + right_head + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
   \renewcommand{\headrule}{\color{osdagGreen}\hrule width\textwidth height 1pt \vspace{2pt}}
