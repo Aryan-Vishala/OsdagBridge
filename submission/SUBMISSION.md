@@ -13,7 +13,7 @@ The original 10-girder OsdagBridge report generated before the report-engine ref
 
 ### 2. Enhanced Report
 [`Report_After.pdf`](Report_After.pdf)  
-The final production report generated using the refactored semantic report engine with vertical Table 1, repeated headers, and unified styling.
+The final production report generated using the refactored semantic report engine with vertical Table 1, repeated headers, embedded CAD models, and unified styling.
 
 ### 3. Technical Changes Report
 [`Technical_Changes_Report.pdf`](Technical_Changes_Report.pdf)  
@@ -64,4 +64,5 @@ Detailed technical report explaining:
 - **Repository:** [https://github.com/Aryan-Vishala/OsdagBridge](https://github.com/Aryan-Vishala/OsdagBridge)
 - **Final Branch:** `report-generator-refactor`
 - **Final Release Tag:** `report-engine-production-accepted`
+- **Final Commit:** `09a8260`
 - **Collaborator:** `Nidhikhare12`
